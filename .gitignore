@@ -1,5 +1,14 @@
 # Project particular ignores
 backup/
+videos/inputs/*
+videos/outputs/*
+
+# Avoid yolo weights except for the tiny harmless ones
+yolo/*.weights
+!yolo/facemask-yolov4-tiny_best.weights
+
+# Avoid TRT engines
+maskcam/*.trt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
