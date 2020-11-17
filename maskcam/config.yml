@@ -1,15 +1,16 @@
 general:
   output_folder: ../videos/outputs/
-  draw_classification: true
+  draw_classification: false
   draw_statistics_text: false
-  draw_statistics_graphics: true
-  draw_panel_faces: true
-  inference_period: 2
+  draw_statistics_graphics: false
+  draw_panel_faces: false
+  inference_period: 1
 
 yolo_generic:
   detection_threshold: 0.5
   nms_threshold: 0.1
   distance_threshold: 1
+  yolo_variant: "yolo_tiny_darknet"  # One of the configurations below
 
 yolo_darknet:  # Config specific to original darknet implementation (detector_darknet.py)
   darknet_path: ../yolo/  # Path with libdarknet.so
@@ -19,15 +20,15 @@ yolo_darknet:  # Config specific to original darknet implementation (detector_da
 
 yolo_tiny_darknet:
   darknet_path: ../yolo/  # Path with libdarknet.so
-  config_file: ../yolo/facemask-yolov4.cfg
-  data_file: ../yolo/data/obj.data
-  weights_file: ../yolo/yolov4-facemask_final.weights
+  config_file: ../yolo/facemask-yolov4-tiny.cfg
+  data_file: integrations/yolo/obj.data
+  weights_file: ../yolo/facemask-yolov4-tiny_best.weights
 
 yolo_pytorch:
   repo_path: ../yolo/pytorch-YOLOv4
   config_file: ./integrations/yolo/yolov4-facemask.cfg
   names_file: ./integrations/yolo/obj.names
-  weights_file: ./yolov4-facemask_final.weights
+  weights_file: ./yolov4-facemask_best.weights
   use_cuda: true
 
 yolo_trt:
@@ -54,7 +55,9 @@ face_mask_detector:
 
 
 debug:
-  draw_detections: false
+  tracker_enabled: false
+  facemask_enabled: false
+  draw_detections: true
   draw_tracking_ids: false
   draw_tracking_debug: false
   draw_predictions: false
