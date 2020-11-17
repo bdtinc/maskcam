@@ -27,9 +27,6 @@ class FaceMaskDetector:
         self.box_no_mask = config["box_no_mask"]
         self.max_votes = config["classification_max_votes"]
         self.classification_batch = config["classification_batch"]
-        self.extract_faces_mode = config["extract_faces_mode"]
-        self.extract_faces_folder = config["extract_faces_folder"]
-        self.extract_faces_step = config["extract_faces_step"]
 
         self.left_margin = config["left_margin"]
         self.right_margin = config["right_margin"]
@@ -107,16 +104,8 @@ class FaceMaskDetector:
             dict()
         )  # id: probability of person having a mask 0-1 (exp filter)
         self.people_detected = set()  # ids of people w/ face detected at least once
-        self.people_save_faces = dict()  # id: person // Only keep until saving faces
 
         self.has_mask_N = 5
-        if self.extract_faces_mode:
-            print(f"Extracting faces to {self.extract_faces_folder}")
-
-            # Create directories
-            for path in [self.extract_faces_folder]:
-                if path and not os.path.exists(path):
-                    os.mkdir(path)
 
     def init_frame(self):
         self.stat_current_y = 2 * self.stat_margin
@@ -194,37 +183,16 @@ class FaceMaskDetector:
                         # Classify faces: keep faces list for each person
                         if self.fn_classify_faces is not None:
                             person.recent_detected_faces.append(cropped_head)
-                        if self.extract_faces_mode:
-                            self.people_save_faces[
-                                person.id
-                            ] = person  # keep clean dict to avoid a memory leak
 
                         boxes_face_detected.append(head_box)
                     else:
                         boxes_face_invalid.append(head_box)
 
-        if self.extract_faces_mode:
-            self.save_faces()
         self.classify_people(tracked_people)
 
         self.step += 1  # Run classify_people() before step > 0
 
         return boxes_face_detected, boxes_face_invalid
-
-    def save_faces(self):
-        files_path_prefix = os.path.join(self.extract_faces_folder, f"{self.files_prefix}")
-        for person_id, person in self.people_save_faces.items():
-            if (
-                person.last_detected_face is not None
-                and (self.step - person.last_saved_step) > self.extract_faces_step
-            ):
-                face = person.last_detected_face
-                person.last_saved_step = self.step
-                cv2.imwrite(f"{files_path_prefix}_person_{person_id}_{self.step}.jpg", face)
-                person.last_detected_face = None
-        self.people_save_faces = (
-            {}
-        )  # Only keep reference until faces are saved to avoid memory leak
 
     def draw_classification(self, frame, predicted_people):
         for person in predicted_people:

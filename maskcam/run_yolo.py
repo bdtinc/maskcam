@@ -9,12 +9,12 @@ from norfair.drawing import draw_tracked_objects, draw_points, draw_debug_metric
 
 from face_mask_detector import FaceMaskDetector
 
-# from integrations.yolo.detector_darknet import DetectorDarknet
+from integrations.yolo.detector_darknet import DetectorDarknet
 
 # from integrations.yolo.detector_pytorch import DetectorYoloPytorch
 
 # Required python tensorrt, usually compiled for python 3.6 at system level
-from integrations.yolo.detector_trt import DetectorYoloTRT
+# from integrations.yolo.detector_trt import DetectorYoloTRT
 
 from integrations.yolo.yolo_adaptor import YoloAdaptor
 
@@ -25,11 +25,11 @@ with open("config.yml", "r") as stream:
     config = yaml.load(stream)
 
 # Yolo implementation to use
-# detector = DetectorDarknet({**config["yolo_darknet"], **config["yolo_generic"]})
+detector = DetectorDarknet({**config["yolo_darknet"], **config["yolo_generic"]})
 
 # detector = DetectorYoloPytorch({**config["yolo_pytorch"], **config["yolo_generic"]})
 
-detector = DetectorYoloTRT({**config["yolo_trt"], **config["yolo_generic"]})
+# detector = DetectorYoloTRT({**config["yolo_trt"], **config["yolo_generic"]})
 
 # Converter functions from Yolo -> Tracker + FaceMaskDetector
 pose_adaptor = YoloAdaptor(config["yolo_generic"])

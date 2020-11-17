@@ -14,6 +14,12 @@ yolo_generic:
 yolo_darknet:  # Config specific to original darknet implementation (detector_darknet.py)
   darknet_path: ../yolo/  # Path with libdarknet.so
   config_file: ../yolo/facemask-yolov4.cfg
+  data_file: integrations/yolo/obj.data
+  weights_file: ../yolo/facemask-yolov4_best.weights
+
+yolo_tiny_darknet:
+  darknet_path: ../yolo/  # Path with libdarknet.so
+  config_file: ../yolo/facemask-yolov4.cfg
   data_file: ../yolo/data/obj.data
   weights_file: ../yolo/yolov4-facemask_final.weights
 
