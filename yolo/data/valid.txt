@@ -16,3 +16,7 @@ data/obj_train_data/images/2_30s_420.jpg
 data/obj_train_data/images/1_30s_420.jpg
 data/obj_train_data/images/18_30s_660.jpg
 data/obj_train_data/images/18_30s_210.jpg
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.17.10.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.07.22.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.48.28.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.46.01.png

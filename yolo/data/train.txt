@@ -197,6 +197,47 @@ data/obj_train_data/images/demo2_30s_210.jpg
 data/obj_train_data/images/demo2_30s_180.jpg
 data/obj_train_data/images/demo2_30s_120.jpg
 data/obj_train_data/images/demo2_30s_0.jpg
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.19.22.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.19.01.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.16.53.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.13.44.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.13.31.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.12.25.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.12.09.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.10.29.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.08.43.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.08.34.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.08.02.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.07.30.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.04.14.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.03.56.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.03.48.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.02.11.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 13.01.57.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.59.50.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.59.41.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.59.29.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.59.14.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.58.59.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.57.21.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.57.15.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.57.09.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.55.30.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.55.17.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.54.29.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.53.22.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.53.14.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.52.56.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.51.16.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.51.00.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.50.51.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.48.34.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.48.19.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.48.02.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.47.01.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.46.52.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.46.31.png
+data/obj_train_data/images/Screen Shot 2020-11-18 at 12.46.11.png
 data/obj_train_data/images/2_30s_90.jpg
 data/obj_train_data/images/2_30s_720.jpg
 data/obj_train_data/images/2_30s_690.jpg
