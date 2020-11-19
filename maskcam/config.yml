@@ -62,6 +62,7 @@ face_mask_detector:
 debug:
   tracker_enabled: false
   facemask_enabled: false
+  output_detector_resolution: true
   draw_detections: true
   draw_tracking_ids: false
   draw_tracking_debug: false

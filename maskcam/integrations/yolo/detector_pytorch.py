@@ -26,10 +26,10 @@ class DetectorYoloPytorch:
             self.model.cuda()
         self.class_names = load_class_names(config["names_file"])
 
-    def detect(self, frame, rescale_detections=True, recolor=False):
+    def detect(self, frame, rescale_detections=True):
         orig_height, orig_width = frame.shape[:2]
-        frame = cv2.resize(frame, (self.model.width, self.model.height))
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_resized = cv2.resize(frame, (self.model.width, self.model.height))
+        frame = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
 
         detections = self._do_detect(frame)
         width = orig_width if rescale_detections else self.model.width
@@ -43,9 +43,7 @@ class DetectorYoloPytorch:
             p = d[4]
             label = self.class_names[d[6]]
             dets.append(Detection(np.array((d[0:2], d[2:4])), data={"label": label, "p": p},))
-        if recolor:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        return dets, frame
+        return dets, frame_resized
 
     def _do_detect(self, img):
         """ Adapted from torch_utils.py -> do_detect() """

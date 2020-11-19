@@ -1,4 +1,5 @@
 # %%
+import os
 import sys
 import yaml
 import time
@@ -23,7 +24,7 @@ yolo_config = {**config[yolo_variant], **config["yolo_generic"]}
 print(f"Loading yolo variant: {yolo_variant}")
 
 prefix_trt = "yolo_trt"  # yolo_trt and yolo_trt_tiny
-if yolo_variant[:len(prefix_trt)] == prefix_trt:  # Fastest implementation
+if yolo_variant[: len(prefix_trt)] == prefix_trt:  # Fastest implementation
     # Requires python tensorrt, usually compiled for python 3.6 at system level
     from integrations.yolo.detector_trt import DetectorYoloTRT  # noqa
 
@@ -51,9 +52,13 @@ tracker = Tracker(
 )
 
 # Video handler (Norfair)
+output_codec = (  # Jetson: use VIDEO_CODEC=avc1
+    os.environ["VIDEO_CODEC"] if "VIDEO_CODEC" in os.environ else None
+)
 video = Video(
     input_path=sys.argv[1],
-    output_path=config["general"]["output_folder"],  # , codec_fourcc="avc1")
+    output_path=config["general"]["output_folder"],
+    codec_fourcc=output_codec,
 )
 
 # Face masks stuff (classification voting/face extraction/margins/drawing)
@@ -66,19 +71,27 @@ face_mask_detector = FaceMaskDetector(
 
 timer_yolo = 0.0  # Reset to 0.0 after first frame to avoid counting model loading
 timer_tracker = 0.0
-timer_logic = 0.0
+timer_facemask = 0.0
 timer_drawing = 0.0
+timer_write = 0.0
+timer_read = 0.0
 
 # High level components
 tracker_enabled = config["debug"]["tracker_enabled"]
 facemask_enabled = config["debug"]["facemask_enabled"]
+detector_output = config["debug"]["output_detector_resolution"]
 
+t_frame_end = time.time()
 for k, frame in enumerate(video):
 
     tick = time.time()
+    timer_read = tick - t_frame_end
 
-    # Filter parts to track, and also keep detected pose tracked_scores for later use
-    detections_tracker, frame_preprocessed = detector.detect(frame, rescale_detections=True)
+    # YOLO object detection (outputs: norfair.tracker.Detection)
+    if detector_output:  # Only for debugging purposes: use resized frame in video output
+        detections_tracker, frame = detector.detect(frame, rescale_detections=False)
+    else:
+        detections_tracker, _ = detector.detect(frame, rescale_detections=True)
     timer_yolo += time.time() - tick
 
     # Tracker update
@@ -95,7 +108,7 @@ for k, frame in enumerate(video):
         boxes_face_ok, boxes_face_fail = face_mask_detector.detect_face_masks(
             frame, tracked_people
         )
-    timer_logic += time.time() - tick
+    timer_facemask += time.time() - tick
 
     # Drawing functions
     tick = time.time()
@@ -131,22 +144,31 @@ for k, frame in enumerate(video):
                 face_mask_detector.draw_statistics_text(frame)
             if panel_graph:
                 face_mask_detector.draw_statistics_graphics(frame)
-
-    video.write(frame)
     timer_drawing += time.time() - tick
+
+    tick = time.time()
+    video.write(frame)
+    t_frame_end = time.time()
+    timer_write += t_frame_end - tick
 
     # Reset counters after first frame to avoid counting model loading
     if k == 0:
         timer_yolo = 0.0
         timer_tracker = 0.0
-        timer_logic = 0.0
+        timer_facemask = 0.0
         timer_drawing = 0.0
+        timer_write = 0.0
+        timer_read = 0.0
 
 if config["debug"]["profiler"]:
     # No need to divide between (k+1) - counters reset on k==0
-    timer_total = timer_yolo + timer_tracker + timer_logic + timer_drawing
+    timer_total = (
+        timer_yolo + timer_tracker + timer_facemask + timer_drawing + timer_write + timer_read
+    )
     print(f"Avg total time/frame:\t{timer_total / k:.4f}s\t| FPS: {k / timer_total:.1f}")
     print(f"Avg yolo time/frame:\t{timer_yolo / k:.4f}s\t| FPS: {k / timer_yolo:.1f}")
-    print(f"Avg logic time/frame:\t{timer_logic / k:.4f}s\t| FPS: {k / timer_logic:.1f}")
+    print(f"Avg logic time/frame:\t{timer_facemask / k:.4f}s\t| FPS: {k / timer_facemask:.1f}")
     print(f"Avg tracker time/frame:\t{timer_tracker / k:.4f}s\t| FPS: {k / timer_tracker:.1f}")
     print(f"Avg drawing time/frame:\t{timer_drawing / k:.4f}s\t| FPS: {k / timer_drawing:.1f}")
+    print(f"Avg reading time/frame:\t{timer_read / k:.4f}s\t| FPS: {k / timer_read:.1f}")
+    print(f"Avg writing time/frame:\t{timer_write / k:.4f}s\t| FPS: {k / timer_write:.1f}")

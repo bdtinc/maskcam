@@ -32,7 +32,7 @@ git clone git@github.com:rlabbe/filterpy.git
 4. Run `run_yolo.py` adding `norfair` and `filterpy` to the path:
 ```
 cd maskcam
-PYTHONPATH=../../norfair:../../filterpy python3 run_yolo.py video_file.mp4
+VIDEO_CODEC=avc1 PYTHONPATH=../../norfair:../../filterpy python3 run_yolo.py video_file.mp4
 ```
 
 ## Convert weights generated using the original darknet implementation to TRT

@@ -35,10 +35,12 @@ class DetectorDarknet:
         y_top, y_bottom = y - h / 2, y + h / 2
         return ((int(x_left), int(y_top)), (int(x_right), int(y_bottom)))
 
-    def detect(self, frame, rescale_detections=True, recolor=False):
+    def detect(self, frame, rescale_detections=True):
         orig_height, orig_width = frame.shape[:2]
-        frame = cv2.resize(frame, (self.width, self.height), interpolation=cv2.INTER_LINEAR)
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_resized = cv2.resize(
+            frame, (self.width, self.height), interpolation=cv2.INTER_LINEAR
+        )
+        frame = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
         self.darknet.copy_image_from_bytes(self.darknet_image, frame.tobytes())
         detections = self.darknet.detect_image(
             self.network,
@@ -62,6 +64,4 @@ class DetectorDarknet:
                     np.array(self._yolo_to_bbox((xc, yc, w, h))), data={"label": d[0], "p": d[1]},
                 )
             )
-        if recolor:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        return dets, frame
+        return dets, frame_resized
