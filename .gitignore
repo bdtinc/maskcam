@@ -4,6 +4,7 @@ videos/inputs/*
 videos/outputs/*
 .DS_Store
 *.onnx
+.vscode/
 
 # Avoid yolo weights except for the tiny harmless ones
 yolo/*.weights

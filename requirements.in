@@ -10,14 +10,12 @@ ipdb
 Cython
 scikit-learn
 numpy
-opencv-python
 scipy
-matplotlib
 PyYAML
-
-# Tracker
-norfair
 
 # Pytorch
 torch
 torchvision
+
+# Tracker & video pipeline. Exclude it on Jetson (see README)
+norfair
