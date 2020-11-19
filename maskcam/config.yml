@@ -10,7 +10,7 @@ yolo_generic:
   detection_threshold: 0.5
   nms_threshold: 0.1
   distance_threshold: 1
-  yolo_variant: "yolo_tiny_darknet"  # One of the configurations below
+  yolo_variant: "yolo_trt_tiny"  # One of the configurations below
 
 yolo_darknet:  # Config specific to original darknet implementation (detector_darknet.py)
   darknet_path: ../yolo/  # Path with libdarknet.so
@@ -18,7 +18,7 @@ yolo_darknet:  # Config specific to original darknet implementation (detector_da
   data_file: integrations/yolo/obj.data
   weights_file: ../yolo/facemask-yolov4_best.weights
 
-yolo_tiny_darknet:
+yolo_darknet_tiny:
   darknet_path: ../yolo/  # Path with libdarknet.so
   config_file: ../yolo/facemask-yolov4-tiny.cfg
   data_file: integrations/yolo/obj.data
@@ -32,8 +32,13 @@ yolo_pytorch:
   use_cuda: true
 
 yolo_trt:
-  names_file: ./integrations/yolo/obj.names
-  engine_file: ./yolov4-facemask.trt
+  names_file: ./yolo/data/obj.names
+  engine_file: ../yolo/yolov4-facemask.trt
+  use_cuda: true
+
+yolo_trt_tiny:
+  names_file: ../yolo/data/obj.names
+  engine_file: ../yolo/yolov4-facemask-tiny-fp16.trt
   use_cuda: true
 
 face_mask_detector:

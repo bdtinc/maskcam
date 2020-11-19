@@ -20,8 +20,10 @@ with open("config.yml", "r") as stream:
 # Pick YOLO detector implementation to use
 yolo_variant = config["yolo_generic"]["yolo_variant"]
 yolo_config = {**config[yolo_variant], **config["yolo_generic"]}
+print(f"Loading yolo variant: {yolo_variant}")
 
-if yolo_variant == "yolo_trt":  # Fastest implementation
+prefix_trt = "yolo_trt"  # yolo_trt and yolo_trt_tiny
+if yolo_variant[:len(prefix_trt)] == prefix_trt:  # Fastest implementation
     # Requires python tensorrt, usually compiled for python 3.6 at system level
     from integrations.yolo.detector_trt import DetectorYoloTRT  # noqa
 
