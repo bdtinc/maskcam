@@ -46,7 +46,7 @@ class DetectorYoloTRT:
         self.buffers = self._allocate_buffers(self.engine, 1)
 
         self.input_h = 608  # Set in yolov4-facemask.cfg
-        self.input_w = 608
+        self.input_w = 1024
         self.context.set_binding_shape(0, (1, 3, self.input_h, self.input_w))
 
     def detect(self, frame, rescale_detections=True):
