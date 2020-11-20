@@ -23,8 +23,7 @@ def preprocess_frame(frame, config):
         width = frame.shape[1] - offset_left
     if not height:
         height = frame.shape[0] - offset_top
-    return frame[offset_top:offset_top + height, offset_left:offset_left + width]
-
+    return frame[offset_top : offset_top + height, offset_left : offset_left + width]
 
 
 with open("config.yml", "r") as stream:
@@ -95,6 +94,7 @@ facemask_enabled = config["debug"]["facemask_enabled"]
 detector_output = config["debug"]["output_detector_resolution"]
 
 t_frame_end = time.time()
+frames_batch = []
 for k, frame in enumerate(video):
 
     tick = time.time()
@@ -102,70 +102,83 @@ for k, frame in enumerate(video):
 
     # Crop parts of the frame
     frame = preprocess_frame(frame, config["video"])
+    frames_batch.append(frame)
 
-    # YOLO object detection (outputs: norfair.tracker.Detection)
-    if detector_output:  # Only for debugging purposes: use resized frame in video output
-        detections_tracker, frame = detector.detect(frame, rescale_detections=False)
-    else:
-        detections_tracker, _ = detector.detect(frame, rescale_detections=True)
-    timer_yolo += time.time() - tick
-
-    # Tracker update
-    tick = time.time()
-    if tracker_enabled:
-        tracked_people = tracker.update(
-            detections_tracker, period=config["general"]["inference_period"]
-        )
-    timer_tracker += time.time() - tick
-
-    # Detect and classify faces from tracked poses
-    tick = time.time()
-    if facemask_enabled and tracker_enabled:
-        boxes_face_ok, boxes_face_fail = face_mask_detector.detect_face_masks(
-            frame, tracked_people
-        )
-    timer_facemask += time.time() - tick
-
-    # Drawing functions
-    tick = time.time()
-    if config["debug"]["draw_detections"]:  # Raw yolo detections
-        pose_adaptor.draw_raw_detections(frame, detections_tracker)
-
-    if tracker_enabled:
-        if config["debug"]["draw_predictions"]:
-            draw_tracked_objects(frame, tracked_people, id_size=0)
-        if config["debug"]["draw_tracking_ids"]:
-            draw_tracked_objects(
-                frame, tracked_people, draw_points=False, id_thickness=1, color=Color.white
+    if len(frames_batch) == detector.batch_size:
+        tick = time.time()
+        # YOLO object detection (outputs: norfair.tracker.Detection)
+        if (
+            detector_output
+        ):  # Only for debugging purposes: use resized frame in video output
+            detections_tracker, frames_batch = detector.detect(
+                frames_batch, rescale_detections=False
             )
-        if config["debug"]["draw_tracking_debug"]:
-            draw_debug_metrics(frame, tracked_people)
+        else:
+            detections_tracker, _ = detector.detect(frame, rescale_detections=True)
+        timer_yolo += time.time() - tick
 
-    if facemask_enabled and tracker_enabled:
-        face_mask_detector.draw_margins(frame)
-        if config["general"]["draw_classification"] and facemask_enabled:
-            face_mask_detector.draw_classification(frame, tracked_people)
-        if config["debug"]["draw_face_boxes"]:  # Using tracker
-            face_mask_detector.draw_face_boxes(frame, boxes_face_ok, boxes_face_fail)
+        for d, frame in enumerate(frames_batch):
+            if config["debug"]["draw_detections"]:  # Raw yolo detections
+                pose_adaptor.draw_raw_detections(frame, detections_tracker[d])
+            video.write(frame)
+        frames_batch = []
 
-        # Side panel
-        panel_faces = config["general"]["draw_panel_faces"]
-        panel_text = config["general"]["draw_statistics_text"]
-        panel_graph = config["general"]["draw_statistics_graphics"]
-        if panel_faces or panel_text or panel_graph:
-            face_mask_detector.draw_panel_background(frame)
-            if panel_faces:
-                face_mask_detector.draw_panel_faces(frame, tracked_people)
-            if panel_text:
-                face_mask_detector.draw_statistics_text(frame)
-            if panel_graph:
-                face_mask_detector.draw_statistics_graphics(frame)
-    timer_drawing += time.time() - tick
+    # # Tracker update
+    # tick = time.time()
+    # if tracker_enabled:
+    #     tracked_people = tracker.update(
+    #         detections_tracker, period=config["general"]["inference_period"]
+    #     )
+    # timer_tracker += time.time() - tick
 
-    tick = time.time()
-    video.write(frame)
-    t_frame_end = time.time()
-    timer_write += t_frame_end - tick
+    # # Detect and classify faces from tracked poses
+    # tick = time.time()
+    # if facemask_enabled and tracker_enabled:
+    #     boxes_face_ok, boxes_face_fail = face_mask_detector.detect_face_masks(
+    #         frame, tracked_people
+    #     )
+    # timer_facemask += time.time() - tick
+
+    # # Drawing functions
+    # tick = time.time()
+    # if config["debug"]["draw_detections"]:  # Raw yolo detections
+    #     pose_adaptor.draw_raw_detections(frame, detections_tracker)
+
+    # if tracker_enabled:
+    #     if config["debug"]["draw_predictions"]:
+    #         draw_tracked_objects(frame, tracked_people, id_size=0)
+    #     if config["debug"]["draw_tracking_ids"]:
+    #         draw_tracked_objects(
+    #             frame, tracked_people, draw_points=False, id_thickness=1, color=Color.white
+    #         )
+    #     if config["debug"]["draw_tracking_debug"]:
+    #         draw_debug_metrics(frame, tracked_people)
+
+    # if facemask_enabled and tracker_enabled:
+    #     face_mask_detector.draw_margins(frame)
+    #     if config["general"]["draw_classification"] and facemask_enabled:
+    #         face_mask_detector.draw_classification(frame, tracked_people)
+    #     if config["debug"]["draw_face_boxes"]:  # Using tracker
+    #         face_mask_detector.draw_face_boxes(frame, boxes_face_ok, boxes_face_fail)
+
+    #     # Side panel
+    #     panel_faces = config["general"]["draw_panel_faces"]
+    #     panel_text = config["general"]["draw_statistics_text"]
+    #     panel_graph = config["general"]["draw_statistics_graphics"]
+    #     if panel_faces or panel_text or panel_graph:
+    #         face_mask_detector.draw_panel_background(frame)
+    #         if panel_faces:
+    #             face_mask_detector.draw_panel_faces(frame, tracked_people)
+    #         if panel_text:
+    #             face_mask_detector.draw_statistics_text(frame)
+    #         if panel_graph:
+    #             face_mask_detector.draw_statistics_graphics(frame)
+    # timer_drawing += time.time() - tick
+
+    # tick = time.time()
+    # video.write(frame)
+    # t_frame_end = time.time()
+    # timer_write += t_frame_end - tick
 
     # Reset counters after first frame to avoid counting model loading
     if k == 0:
@@ -179,12 +192,22 @@ for k, frame in enumerate(video):
 if config["debug"]["profiler"]:
     # No need to divide between (k+1) - counters reset on k==0
     timer_total = (
-        timer_yolo + timer_tracker + timer_facemask + timer_drawing + timer_write + timer_read
+        timer_yolo
+        + timer_tracker
+        + timer_facemask
+        + timer_drawing
+        + timer_write
+        + timer_read
     )
-    print(f"Avg total time/frame:\t{timer_total / k:.4f}s\t| FPS: {k / timer_total:.1f}")
+    print(f"Frames processed: {k}")
+    print(
+        f"Avg total time/frame:\t{timer_total / k:.4f}s\t| FPS: {k / timer_total:.1f}"
+    )
     print(f"Avg yolo time/frame:\t{timer_yolo / k:.4f}s\t| FPS: {k / timer_yolo:.1f}")
-    print(f"Avg logic time/frame:\t{timer_facemask / k:.4f}s\t| FPS: {k / timer_facemask:.1f}")
-    print(f"Avg tracker time/frame:\t{timer_tracker / k:.4f}s\t| FPS: {k / timer_tracker:.1f}")
-    print(f"Avg drawing time/frame:\t{timer_drawing / k:.4f}s\t| FPS: {k / timer_drawing:.1f}")
-    print(f"Avg reading time/frame:\t{timer_read / k:.4f}s\t| FPS: {k / timer_read:.1f}")
-    print(f"Avg writing time/frame:\t{timer_write / k:.4f}s\t| FPS: {k / timer_write:.1f}")
+
+    # print(f"Avg logic time/frame:\t{timer_facemask / k:.4f}s\t| FPS: {k / timer_facemask:.1f}")
+    # print(f"Avg tracker time/frame:\t{timer_tracker / k:.4f}s\t| FPS: {k / timer_tracker:.1f}")
+    # print(f"Avg drawing time/frame:\t{timer_drawing / k:.4f}s\t| FPS: {k / timer_drawing:.1f}")
+    # print(f"Avg reading time/frame:\t{timer_read / k:.4f}s\t| FPS: {k / timer_read:.1f}")
+    # print(f"Avg writing time/frame:\t{timer_write / k:.4f}s\t| FPS: {k / timer_write:.1f}")
+    detector.print_profiler()

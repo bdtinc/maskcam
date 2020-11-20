@@ -38,14 +38,22 @@ yolo_pytorch:
   use_cuda: true
 
 yolo_trt:
-  names_file: ./yolo/data/obj.names
-  engine_file: ../yolo/yolov4-facemask.trt
+  names_file: ../yolo/data/obj.names
+  engine_file: ../../yolo/tensorrt_yolo.trt
   use_cuda: true
+  input_width: 608
+  input_height: 608
+  batch_size: 1
 
 yolo_trt_tiny:
   names_file: ../yolo/data/obj.names
-  engine_file: ../yolo/yolov4-facemask-tiny-fp16.trt
+  # engine_file: ../yolo/yolov4-facemask-tiny-fp16.trt
+  # engine_file: ../../tensorrt_1024_608_fp16.trt
+  engine_file: ../../tensorrt_batch8_fp16.trt
   use_cuda: true
+  input_width: 608
+  input_height: 608
+  batch_size: 8
 
 face_mask_detector:
   threshold_vote: 0.8
