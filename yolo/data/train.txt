@@ -1,3 +1,4 @@
+data/obj_train_data/images/supermarket.jpg
 data/obj_train_data/images/stock_side_nomask_990.jpg
 data/obj_train_data/images/stock_side_nomask_960.jpg
 data/obj_train_data/images/stock_side_nomask_930.jpg
@@ -164,6 +165,7 @@ data/obj_train_data/images/hdstock_2_210.jpg
 data/obj_train_data/images/hdstock_2_180.jpg
 data/obj_train_data/images/hdstock_2_150.jpg
 data/obj_train_data/images/hdstock_2_0.jpg
+data/obj_train_data/images/empty_Champagne_bottles.jpg
 data/obj_train_data/images/demo_many_1260.jpg
 data/obj_train_data/images/demo_many_1230.jpg
 data/obj_train_data/images/demo_many_1200.jpg
@@ -197,6 +199,10 @@ data/obj_train_data/images/demo2_30s_210.jpg
 data/obj_train_data/images/demo2_30s_180.jpg
 data/obj_train_data/images/demo2_30s_120.jpg
 data/obj_train_data/images/demo2_30s_0.jpg
+data/obj_train_data/images/champagne_shop.jpg
+data/obj_train_data/images/bottles_2.jpg
+data/obj_train_data/images/bottles.jpg
+data/obj_train_data/images/Wine-Bottles.jpg
 data/obj_train_data/images/Screen Shot 2020-11-18 at 13.19.22.png
 data/obj_train_data/images/Screen Shot 2020-11-18 at 13.19.01.png
 data/obj_train_data/images/Screen Shot 2020-11-18 at 13.16.53.png
@@ -238,6 +244,7 @@ data/obj_train_data/images/Screen Shot 2020-11-18 at 12.47.01.png
 data/obj_train_data/images/Screen Shot 2020-11-18 at 12.46.52.png
 data/obj_train_data/images/Screen Shot 2020-11-18 at 12.46.31.png
 data/obj_train_data/images/Screen Shot 2020-11-18 at 12.46.11.png
+data/obj_train_data/images/Joe-in-shop-with-mask-Main-Street.jpg
 data/obj_train_data/images/2_30s_90.jpg
 data/obj_train_data/images/2_30s_720.jpg
 data/obj_train_data/images/2_30s_690.jpg
