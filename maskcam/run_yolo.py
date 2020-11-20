@@ -203,6 +203,10 @@ if config["debug"]["profiler"]:
     print(
         f"Avg total time/frame:\t{timer_total / k:.4f}s\t| FPS: {k / timer_total:.1f}"
     )
+    print(f"Frames processed: {k}")
+    print(
+        f"Avg total time/frame:\t{timer_total / k:.4f}s\t| FPS: {k / timer_total:.1f}"
+    )
     print(f"Avg yolo time/frame:\t{timer_yolo / k:.4f}s\t| FPS: {k / timer_yolo:.1f}")
 
     # print(f"Avg logic time/frame:\t{timer_facemask / k:.4f}s\t| FPS: {k / timer_facemask:.1f}")
