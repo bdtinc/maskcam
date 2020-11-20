@@ -14,6 +14,19 @@ from integrations.yolo.yolo_adaptor import YoloAdaptor
 
 
 # %%
+def preprocess_frame(frame, config):
+    offset_left = config["input_left"]
+    offset_top = config["input_top"]
+    width = config["input_width"]
+    height = config["input_height"]
+    if not width:
+        width = frame.shape[1] - offset_left
+    if not height:
+        height = frame.shape[0] - offset_top
+    return frame[offset_top:offset_top + height, offset_left:offset_left + width]
+
+
+
 with open("config.yml", "r") as stream:
     # Not using Loader=yaml.FullLoader since it doesn't work on jetson PyYAML version
     config = yaml.load(stream)
@@ -86,6 +99,9 @@ for k, frame in enumerate(video):
 
     tick = time.time()
     timer_read = tick - t_frame_end
+
+    # Crop parts of the frame
+    frame = preprocess_frame(frame, config["video"])
 
     # YOLO object detection (outputs: norfair.tracker.Detection)
     if detector_output:  # Only for debugging purposes: use resized frame in video output
