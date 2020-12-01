@@ -6,12 +6,18 @@ videos/outputs/*
 *.onnx
 .vscode/
 
+# Intermediate files to convert MobileNetV2 from TF->TF-TRT
+utils/*.png
+mobilenetv2/inference_graph_*/
+mobilenetv2/converted_trt_*.pb
+
 # Avoid yolo weights except for the tiny harmless ones
 yolo/*.weights
 !yolo/facemask-yolov4-tiny_best.weights
 
 # Avoid TRT engines
 maskcam/*.trt
+yolo/*.engine
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

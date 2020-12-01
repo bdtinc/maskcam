@@ -1,16 +1,19 @@
 # %%
 import os
+import cv2
 import sys
 import yaml
 import time
-
-from norfair.video import Video
-from norfair.tracker import Tracker
-from norfair.drawing import draw_tracked_objects, draw_debug_metrics, Color
+import numpy as np
+import tensorflow as tf
 
 from face_mask_detector import FaceMaskDetector
-
 from integrations.yolo.yolo_adaptor import YoloAdaptor
+
+sys.path.append("../../norfair")
+from norfair.video import Video  # noqa
+from norfair.tracker import Tracker, Detection  # noqa
+from norfair.drawing import draw_tracked_objects, draw_debug_metrics, Color  # noqa
 
 
 # %%
@@ -26,29 +29,71 @@ def preprocess_frame(frame, config):
     return frame[offset_top : offset_top + height, offset_left : offset_left + width]
 
 
+class DetectorMobileNetV2:
+    def __init__(self, config):
+        self.batch_size = config["batch_size"]
+        self.label_map = config["label_map"]
+
+        # Load optimized tf-trt model from graph file (.pb)
+        self.tf_trt_graph_file = config["tf_trt_graph"]
+        self.trt_graph = tf.compat.v1.GraphDef()
+        with open(self.tf_trt_graph_file, "rb") as f:
+            self.trt_graph.ParseFromString(f.read())
+
+        tf_config = tf.ConfigProto()
+        tf_config.gpu_options.allow_growth = True
+        self.tf_sess = tf.Session(config=tf_config)
+        tf.import_graph_def(self.trt_graph, name="")
+
+        self.tf_input = self.tf_sess.graph.get_tensor_by_name("image_tensor:0")
+        self.tf_scores = self.tf_sess.graph.get_tensor_by_name("detection_scores:0")
+        self.tf_boxes = self.tf_sess.graph.get_tensor_by_name("detection_boxes:0")
+        self.tf_classes = self.tf_sess.graph.get_tensor_by_name("detection_classes:0")
+        self.tf_num_detections = self.tf_sess.graph.get_tensor_by_name(
+            "num_detections:0"
+        )
+
+    def detect(self, frames_opencv):
+        frames = [cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames_opencv]
+        scores, boxes, classes, num_detections = self.tf_sess.run(
+            [self.tf_scores, self.tf_boxes, self.tf_classes, self.tf_num_detections],
+            feed_dict={self.tf_input: np.stack(frames)},
+        )
+
+        height = frames[0].shape[0]
+        width = frames[0].shape[1]
+        resize_factors = np.array([height, width, height, width])
+        dets_batches = []
+
+        for batch_idx in range(boxes.shape[0]):
+            dets = []
+            for k, d in enumerate(boxes[batch_idx]):
+                p = scores[batch_idx][k]
+                label = self.label_map[int(classes[batch_idx][k])]
+
+                # Relative scale to frame size
+                d *= resize_factors
+                # Reference from bottom-left to top-left
+                # d[0] = height - d[0]
+                # d[2] = height - d[2]
+                dets.append(
+                    Detection(
+                        # Convert from [y1, x1, y2, x2] to [(x1, y1), (x2, y2)]
+                        d.reshape(2, 2)[:, [1, 0]],
+                        data={"label": label, "p": p},
+                    )
+                )
+            dets_batches.append(dets)
+        return dets_batches
+
+
 with open("config.yml", "r") as stream:
     # Not using Loader=yaml.FullLoader since it doesn't work on jetson PyYAML version
     config = yaml.load(stream)
 
-# Pick YOLO detector implementation to use
-yolo_variant = config["yolo_generic"]["yolo_variant"]
-yolo_config = {**config[yolo_variant], **config["yolo_generic"]}
-print(f"Loading yolo variant: {yolo_variant}")
+config_detector = config["mobilenetv2"]
+detector = DetectorMobileNetV2(config_detector)
 
-prefix_trt = "yolo_trt"  # yolo_trt and yolo_trt_tiny
-if yolo_variant[: len(prefix_trt)] == prefix_trt:  # Fastest implementation
-    # Requires python tensorrt, usually compiled for python 3.6 at system level
-    from integrations.yolo.detector_trt import DetectorYoloTRT  # noqa
-
-    detector = DetectorYoloTRT(yolo_config)
-elif yolo_variant == "yolo_pytorch":
-    from integrations.yolo.detector_pytorch import DetectorYoloPytorch  # noqa
-
-    detector = DetectorYoloPytorch(yolo_config)
-else:
-    from integrations.yolo.detector_darknet import DetectorDarknet  # noqa
-
-    detector = DetectorDarknet(yolo_config)
 
 # Converter functions from Yolo -> Tracker + FaceMaskDetector
 pose_adaptor = YoloAdaptor(config["yolo_generic"])
@@ -81,7 +126,7 @@ face_mask_detector = FaceMaskDetector(
     fn_classify_people=pose_adaptor.classify_people,
 )
 
-timer_yolo = 0.0  # Reset to 0.0 after first frame to avoid counting model loading
+timer_detector = 0.0  # Reset to 0.0 after first frame to avoid counting model loading
 timer_tracker = 0.0
 timer_facemask = 0.0
 timer_drawing = 0.0
@@ -102,19 +147,10 @@ for k, frame in enumerate(video):
     # Crop parts of the frame
     frame = preprocess_frame(frame, config["video"])
 
-    tick = time.time()
-    # YOLO object detection (outputs: norfair.tracker.Detection)
-    if (
-        detector_output
-    ):  # Only for debugging purposes: use resized frame in video output
-        detections_tracker, frames_resized = detector.detect(
-            [frame], rescale_detections=False
-        )
-        frame = frames_resized[0]
-    else:
-        detections_tracker, _ = detector.detect([frame], rescale_detections=True)
-    detections_tracker = detections_tracker[0]  # Remove batch dimension
-    timer_yolo += time.time() - tick
+    # TODO: Implement detector_output resolution
+    detections_tracker = detector.detect([frame])
+    timer_detector += time.time() - tick
+    detections_tracker = detections_tracker[0]  # TODO: implement batch_size > 1
 
     # Tracker update
     tick = time.time()
@@ -179,7 +215,7 @@ for k, frame in enumerate(video):
 
     # Reset counters after first frame to avoid counting model loading
     if k == 0:
-        timer_yolo = 0.0
+        timer_detector = 0.0
         timer_tracker = 0.0
         timer_facemask = 0.0
         timer_drawing = 0.0
@@ -189,26 +225,31 @@ for k, frame in enumerate(video):
 if config["debug"]["profiler"]:
     # No need to divide between (k+1) - counters reset on k==0
     timer_total = (
-        timer_yolo
+        timer_detector
         + timer_tracker
         + timer_facemask
         + timer_drawing
         + timer_write
         + timer_read
     )
-    print(f"Frames processed: {k}")
     print(
         f"Avg total time/frame:\t{timer_total / k:.4f}s\t| FPS: {k / timer_total:.1f}"
     )
-    print(f"Frames processed: {k}")
     print(
-        f"Avg total time/frame:\t{timer_total / k:.4f}s\t| FPS: {k / timer_total:.1f}"
+        f"Avg detector time/frame:\t{timer_detector / k:.4f}s\t| FPS: {k / timer_detector:.1f}"
     )
-    print(f"Avg yolo time/frame:\t{timer_yolo / k:.4f}s\t| FPS: {k / timer_yolo:.1f}")
-
-    # print(f"Avg logic time/frame:\t{timer_facemask / k:.4f}s\t| FPS: {k / timer_facemask:.1f}")
-    # print(f"Avg tracker time/frame:\t{timer_tracker / k:.4f}s\t| FPS: {k / timer_tracker:.1f}")
-    # print(f"Avg drawing time/frame:\t{timer_drawing / k:.4f}s\t| FPS: {k / timer_drawing:.1f}")
-    # print(f"Avg reading time/frame:\t{timer_read / k:.4f}s\t| FPS: {k / timer_read:.1f}")
-    # print(f"Avg writing time/frame:\t{timer_write / k:.4f}s\t| FPS: {k / timer_write:.1f}")
-    detector.print_profiler()
+    print(
+        f"Avg logic time/frame:\t{timer_facemask / k:.4f}s\t| FPS: {k / timer_facemask:.1f}"
+    )
+    print(
+        f"Avg tracker time/frame:\t{timer_tracker / k:.4f}s\t| FPS: {k / timer_tracker:.1f}"
+    )
+    print(
+        f"Avg drawing time/frame:\t{timer_drawing / k:.4f}s\t| FPS: {k / timer_drawing:.1f}"
+    )
+    print(
+        f"Avg reading time/frame:\t{timer_read / k:.4f}s\t| FPS: {k / timer_read:.1f}"
+    )
+    print(
+        f"Avg writing time/frame:\t{timer_write / k:.4f}s\t| FPS: {k / timer_write:.1f}"
+    )
