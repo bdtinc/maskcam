@@ -1,16 +1,19 @@
 # %%
 import os
+import cv2
 import sys
 import yaml
 import time
 import numpy as np
 import tensorflow as tf
 
-from norfair.video import Video
-from norfair.tracker import Tracker
-from norfair.drawing import draw_tracked_objects, draw_debug_metrics, Color
-
 from face_mask_detector import FaceMaskDetector
+from integrations.yolo.yolo_adaptor import YoloAdaptor
+
+sys.path.append("../../norfair")
+from norfair.video import Video  # noqa
+from norfair.tracker import Tracker, Detection  # noqa
+from norfair.drawing import draw_tracked_objects, draw_debug_metrics, Color  # noqa
 
 
 # %%
@@ -28,26 +31,21 @@ def preprocess_frame(frame, config):
 
 class DetectorMobileNetV2:
     def __init__(self, config):
-        self.tf_trt_graph_file = config["tf_trt_graph"]
         self.batch_size = config["batch_size"]
-        self.trt_graph = tf.GraphDef()
+        self.label_map = config["label_map"]
+
+        # Load optimized tf-trt model from graph file (.pb)
+        self.tf_trt_graph_file = config["tf_trt_graph"]
+        self.trt_graph = tf.compat.v1.GraphDef()
         with open(self.tf_trt_graph_file, "rb") as f:
             self.trt_graph.ParseFromString(f.read())
-
-        self.input_names = ["image_tensor"]
-        self.output_names = [
-            "detection_boxes",
-            "detection_classes",
-            "detection_scores",
-            "num_detections",
-        ]
 
         tf_config = tf.ConfigProto()
         tf_config.gpu_options.allow_growth = True
         self.tf_sess = tf.Session(config=tf_config)
         tf.import_graph_def(self.trt_graph, name="")
 
-        self.tf_input = self.tf_sess.graph.get_tensor_by_name(input_names[0] + ":0")
+        self.tf_input = self.tf_sess.graph.get_tensor_by_name("image_tensor:0")
         self.tf_scores = self.tf_sess.graph.get_tensor_by_name("detection_scores:0")
         self.tf_boxes = self.tf_sess.graph.get_tensor_by_name("detection_boxes:0")
         self.tf_classes = self.tf_sess.graph.get_tensor_by_name("detection_classes:0")
@@ -62,40 +60,31 @@ class DetectorMobileNetV2:
             feed_dict={self.tf_input: np.stack(frames)},
         )
 
-        # TODO: Support batch_size > 1
-        boxes = boxes[0]  # index by 0 to remove batch dimension
-        scores = scores[0]
-        classes = classes[0]
-        num_detections = num_detections[0]
+        height = frames[0].shape[0]
+        width = frames[0].shape[1]
+        resize_factors = np.array([height, width, height, width])
+        dets_batches = []
 
-        # plot boxes exceeding score threshold
-        for i in range(int(num_detections)):
-            # scale box to image coordinates
-            box = boxes[i] * np.array(
-                [image.shape[0], image.shape[1], image.shape[0], image.shape[1]]
-            )
+        for batch_idx in range(boxes.shape[0]):
+            dets = []
+            for k, d in enumerate(boxes[batch_idx]):
+                p = scores[batch_idx][k]
+                label = self.label_map[int(classes[batch_idx][k])]
 
-        orig_height, orig_width = frame.shape[:2]
-        frame_resized = cv2.resize(frame, (self.model.width, self.model.height))
-
-        detections = self._do_detect(frame)
-        width = orig_width if rescale_detections else self.model.width
-        height = orig_height if rescale_detections else self.model.height
-        dets = []
-        for k, d in enumerate(detections[0]):
-            d[0] *= width
-            d[1] *= height
-            d[2] *= width
-            d[3] *= height
-            p = d[4]
-            label = self.class_names[d[6]]
-            dets.append(
-                Detection(
-                    np.array((d[0:2], d[2:4])),
-                    data={"label": label, "p": p},
+                # Relative scale to frame size
+                d *= resize_factors
+                # Reference from bottom-left to top-left
+                # d[0] = height - d[0]
+                # d[2] = height - d[2]
+                dets.append(
+                    Detection(
+                        # Convert from [y1, x1, y2, x2] to [(x1, y1), (x2, y2)]
+                        d.reshape(2, 2)[:, [1, 0]],
+                        data={"label": label, "p": p},
+                    )
                 )
-            )
-        return dets, frame_resized
+            dets_batches.append(dets)
+        return dets_batches
 
 
 with open("config.yml", "r") as stream:
@@ -103,6 +92,7 @@ with open("config.yml", "r") as stream:
     config = yaml.load(stream)
 
 config_detector = config["mobilenetv2"]
+detector = DetectorMobileNetV2(config_detector)
 
 
 # Converter functions from Yolo -> Tracker + FaceMaskDetector
@@ -136,7 +126,7 @@ face_mask_detector = FaceMaskDetector(
     fn_classify_people=pose_adaptor.classify_people,
 )
 
-timer_yolo = 0.0  # Reset to 0.0 after first frame to avoid counting model loading
+timer_detector = 0.0  # Reset to 0.0 after first frame to avoid counting model loading
 timer_tracker = 0.0
 timer_facemask = 0.0
 timer_drawing = 0.0
@@ -157,14 +147,10 @@ for k, frame in enumerate(video):
     # Crop parts of the frame
     frame = preprocess_frame(frame, config["video"])
 
-    # YOLO object detection (outputs: norfair.tracker.Detection)
-    if (
-        detector_output
-    ):  # Only for debugging purposes: use resized frame in video output
-        detections_tracker, frame = detector.detect(frame, rescale_detections=False)
-    else:
-        detections_tracker, _ = detector.detect(frame, rescale_detections=True)
-    timer_yolo += time.time() - tick
+    # TODO: Implement detector_output resolution
+    detections_tracker = detector.detect([frame])
+    timer_detector += time.time() - tick
+    detections_tracker = detections_tracker[0]  # TODO: implement batch_size > 1
 
     # Tracker update
     tick = time.time()
@@ -229,7 +215,7 @@ for k, frame in enumerate(video):
 
     # Reset counters after first frame to avoid counting model loading
     if k == 0:
-        timer_yolo = 0.0
+        timer_detector = 0.0
         timer_tracker = 0.0
         timer_facemask = 0.0
         timer_drawing = 0.0
@@ -239,7 +225,7 @@ for k, frame in enumerate(video):
 if config["debug"]["profiler"]:
     # No need to divide between (k+1) - counters reset on k==0
     timer_total = (
-        timer_yolo
+        timer_detector
         + timer_tracker
         + timer_facemask
         + timer_drawing
@@ -249,7 +235,9 @@ if config["debug"]["profiler"]:
     print(
         f"Avg total time/frame:\t{timer_total / k:.4f}s\t| FPS: {k / timer_total:.1f}"
     )
-    print(f"Avg yolo time/frame:\t{timer_yolo / k:.4f}s\t| FPS: {k / timer_yolo:.1f}")
+    print(
+        f"Avg detector time/frame:\t{timer_detector / k:.4f}s\t| FPS: {k / timer_detector:.1f}"
+    )
     print(
         f"Avg logic time/frame:\t{timer_facemask / k:.4f}s\t| FPS: {k / timer_facemask:.1f}"
     )

@@ -18,6 +18,8 @@ mobilenetv2:
   # distance_threshold: 1
   tf_trt_graph: ../mobilenetv2/converted_trt_708_400_bs1.pb
   batch_size: 1
+  # From label_map.pbtxt
+  label_map: {1: "mask", 2: "no_mask", 3: "not_visible", 4: "misplaced"}
 
 yolo_generic:
   detection_threshold: 0.5
