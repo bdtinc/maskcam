@@ -17,6 +17,7 @@ yolo/*.weights
 
 # Avoid TRT engines
 maskcam/*.trt
+yolo/*.engine
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
