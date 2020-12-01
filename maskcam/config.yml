@@ -1,9 +1,9 @@
 general:
   output_folder: ../videos/outputs/
-  draw_classification: false
+  draw_classification: true
   draw_statistics_text: false
-  draw_statistics_graphics: false
-  draw_panel_faces: false
+  draw_statistics_graphics: true
+  draw_panel_faces: true
   inference_period: 1
 
 video:
@@ -67,12 +67,11 @@ yolo_trt_tiny:
 face_mask_detector:
   threshold_vote: 0.8
   extract_faces_step: 5
-  face_min_size: 32
-  classification_batch: 10
+  face_min_size: 16
   classification_voting: true
   box_no_mask: true
-  stat_box_side: "right"
-  resolution: "4k"  # could be "hd" or nothing
+  stat_box_side: "left"
+  resolution: ""  # could be "4k", "hd" or nothing
   classification_max_votes: 100
 
   # Default params
@@ -83,11 +82,11 @@ face_mask_detector:
 
 
 debug:
-  tracker_enabled: false
-  facemask_enabled: false
-  output_detector_resolution: true
+  tracker_enabled: true
+  facemask_enabled: true
+  output_detector_resolution: false
   draw_detections: true
-  draw_tracking_ids: false
+  draw_tracking_ids: true
   draw_tracking_debug: false
   draw_predictions: false
   draw_face_boxes: false

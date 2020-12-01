@@ -38,11 +38,13 @@ class DetectorMobileNetV2:
         self.tf_trt_graph_file = config["tf_trt_graph"]
         self.trt_graph = tf.compat.v1.GraphDef()
         with open(self.tf_trt_graph_file, "rb") as f:
+            print(f"Parsing graph file: {self.tf_trt_graph_file}")
             self.trt_graph.ParseFromString(f.read())
 
         tf_config = tf.ConfigProto()
         tf_config.gpu_options.allow_growth = True
         self.tf_sess = tf.Session(config=tf_config)
+        print(f"Importing graph definition...")
         tf.import_graph_def(self.trt_graph, name="")
 
         self.tf_input = self.tf_sess.graph.get_tensor_by_name("image_tensor:0")
@@ -59,15 +61,15 @@ class DetectorMobileNetV2:
             [self.tf_scores, self.tf_boxes, self.tf_classes, self.tf_num_detections],
             feed_dict={self.tf_input: np.stack(frames)},
         )
-
         height = frames[0].shape[0]
         width = frames[0].shape[1]
         resize_factors = np.array([height, width, height, width])
         dets_batches = []
 
-        for batch_idx in range(boxes.shape[0]):
+        for batch_idx in range(int(boxes.shape[0])):
             dets = []
-            for k, d in enumerate(boxes[batch_idx]):
+            for k in range(int(num_detections[batch_idx])):
+                d = boxes[batch_idx][k]
                 p = scores[batch_idx][k]
                 label = self.label_map[int(classes[batch_idx][k])]
 

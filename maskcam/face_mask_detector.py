@@ -12,13 +12,11 @@ class FaceMaskDetector:
         config,
         fn_get_person_head,
         fn_person_has_face,
-        fn_classify_faces=None,
-        fn_classify_people=None,
+        fn_classify_people,
         files_prefix="",
     ):
         self.fn_get_person_head = fn_get_person_head
         self.fn_person_has_face = fn_person_has_face
-        self.fn_classify_faces = fn_classify_faces
         self.fn_classify_people = fn_classify_people
 
         self.face_min_size = config["face_min_size"]
@@ -26,7 +24,6 @@ class FaceMaskDetector:
         self.classification_voting = config["classification_voting"]
         self.box_no_mask = config["box_no_mask"]
         self.max_votes = config["classification_max_votes"]
-        self.classification_batch = config["classification_batch"]
 
         self.left_margin = config["left_margin"]
         self.right_margin = config["right_margin"]
@@ -39,13 +36,18 @@ class FaceMaskDetector:
             # Bigger faces (HD videos with few people), up to 3 people simultaneusly
             self.stat_font_scale = 0.5
             stat_font_size, _ = cv2.getTextSize(
-                text=" ", fontFace=self.stat_font_type, fontScale=self.stat_font_scale, thickness=1
+                text=" ",
+                fontFace=self.stat_font_type,
+                fontScale=self.stat_font_scale,
+                thickness=1,
             )
             self.stat_font_h = stat_font_size[0]
             self.stat_font_w = stat_font_size[1]
             self.stat_margin = 20
             self.stat_face_size = 80
-            self.stat_box_w = 3 * (self.stat_face_size + self.stat_margin) + self.stat_margin
+            self.stat_box_w = (
+                3 * (self.stat_face_size + self.stat_margin) + self.stat_margin
+            )
             self.stat_facebox_h = (
                 1 * (self.stat_face_size + self.stat_margin)
                 + self.stat_font_h
@@ -55,13 +57,18 @@ class FaceMaskDetector:
             # Big faces like HD videos, but also bigger margin and graphics
             self.stat_font_scale = 0.8
             stat_font_size, _ = cv2.getTextSize(
-                text=" ", fontFace=self.stat_font_type, fontScale=self.stat_font_scale, thickness=1
+                text=" ",
+                fontFace=self.stat_font_type,
+                fontScale=self.stat_font_scale,
+                thickness=1,
             )
             self.stat_font_h = stat_font_size[0]
             self.stat_font_w = stat_font_size[1]
             self.stat_margin = 20
             self.stat_face_size = 100
-            self.stat_box_w = 5 * (self.stat_face_size + self.stat_margin) + self.stat_margin
+            self.stat_box_w = (
+                5 * (self.stat_face_size + self.stat_margin) + self.stat_margin
+            )
             self.stat_facebox_h = (
                 1 * (self.stat_face_size + self.stat_margin)
                 + self.stat_font_h
@@ -71,13 +78,18 @@ class FaceMaskDetector:
             # Smaller faces in side panel, up to 10 people simultaneously in each category
             self.stat_font_scale = 0.5
             stat_font_size, _ = cv2.getTextSize(
-                text=" ", fontFace=self.stat_font_type, fontScale=self.stat_font_scale, thickness=1
+                text=" ",
+                fontFace=self.stat_font_type,
+                fontScale=self.stat_font_scale,
+                thickness=1,
             )
             self.stat_font_h = stat_font_size[0]
             self.stat_font_w = stat_font_size[1]
             self.stat_margin = 10
             self.stat_face_size = 30
-            self.stat_box_w = 8 * (self.stat_face_size + self.stat_margin) + self.stat_margin
+            self.stat_box_w = (
+                8 * (self.stat_face_size + self.stat_margin) + self.stat_margin
+            )
             self.stat_facebox_h = (
                 1 * (self.stat_face_size + self.stat_margin)
                 + self.stat_font_h
@@ -85,7 +97,9 @@ class FaceMaskDetector:
             )
         self.stat_box_side = config["stat_box_side"]
         self.stat_box_h = (
-            1 * (self.stat_face_size + self.stat_margin) + self.stat_font_h + 3 * self.stat_margin
+            1 * (self.stat_face_size + self.stat_margin)
+            + self.stat_font_h
+            + 3 * self.stat_margin
         )
 
         self.color_mask = (128, 255, 128)
@@ -97,8 +111,12 @@ class FaceMaskDetector:
         self.classifier_input_size = 64
         self.files_prefix = files_prefix
         self.step = 0
-        self.people_face_votes_total = dict()  # id: total votes (only people w/face detected)
-        self.people_face_votes_mask = dict()  # id: mask votes (only people w/face detected)
+        self.people_face_votes_total = (
+            dict()
+        )  # id: total votes (only people w/face detected)
+        self.people_face_votes_mask = (
+            dict()
+        )  # id: mask votes (only people w/face detected)
         self.people_votes = dict()  # id: classification results
         self.people_face_mask_p = (
             dict()
@@ -124,7 +142,9 @@ class FaceMaskDetector:
         one is placed below it.
         """
         new_pos_x = self._get_panel_horizontal_position(frame) + margin
-        new_pos_y = min(self.stat_current_y + margin, frame.shape[0] - box_height - margin)
+        new_pos_y = min(
+            self.stat_current_y + margin, frame.shape[0] - box_height - margin
+        )
         self.stat_current_y = new_pos_y + box_height + margin
         # assert self.stat_current_y <= frame.shape[0]  # Check that box is inside the frame size
         return new_pos_x, new_pos_y
@@ -149,13 +169,10 @@ class FaceMaskDetector:
         boxes_face_detected = []
         boxes_face_invalid = []
         for person in tracked_people:
-            person.last_detected_face = None
             person.last_head_box = None
-            if not hasattr(person, "recent_detected_faces"):  # Don't empty if exists
-                person.recent_detected_faces = []
+            person.face_detected = False
+            if not hasattr(person, "last_detected_head"):  # Don't empty if exists
                 person.last_detected_head = None
-                person.last_detected_face = None
-                person.last_saved_step = 0
             if self.classification_voting:
                 if person.id not in self.people_face_votes_mask:
                     self.people_face_votes_mask[person.id] = 0
@@ -176,14 +193,9 @@ class FaceMaskDetector:
                         head_box[0][1] : head_box[1][1], head_box[0][0] : head_box[1][0]
                     ].copy()
                     person.last_detected_head = cropped_head
+                    person.face_detected = self.fn_person_has_face(person)
 
-                    if self.fn_person_has_face(person):
-                        person.last_detected_face = cropped_head
-
-                        # Classify faces: keep faces list for each person
-                        if self.fn_classify_faces is not None:
-                            person.recent_detected_faces.append(cropped_head)
-
+                    if person.face_detected:
                         boxes_face_detected.append(head_box)
                     else:
                         boxes_face_invalid.append(head_box)
@@ -266,7 +278,9 @@ class FaceMaskDetector:
         if self.bottom_margin > 0:
             zones.append(frame[-self.bottom_margin :, :])
         if self.right_margin > 0:
-            zones.append(frame[self.top_margin : -self.bottom_margin, -self.right_margin :])
+            zones.append(
+                frame[self.top_margin : -self.bottom_margin, -self.right_margin :]
+            )
 
         # Darken dividing each pixel by 2
         for zone in zones:
@@ -312,7 +326,9 @@ class FaceMaskDetector:
         box_x, box_y = self._register_panel(frame, box_h, margin=margin)
 
         # Rectangle and text
-        cv2.rectangle(frame, (box_x, box_y), (box_x + box_w, box_y + box_h), color, thickness=1)
+        cv2.rectangle(
+            frame, (box_x, box_y), (box_x + box_w, box_y + box_h), color, thickness=1
+        )
         for position, text in enumerate(
             [
                 "  - Accumulated results -  ",
@@ -324,7 +340,10 @@ class FaceMaskDetector:
             cv2.putText(
                 frame,
                 text,
-                (box_x + margin, box_y + self.stat_font_h * 2 * (position + 1) + margin),
+                (
+                    box_x + margin,
+                    box_y + self.stat_font_h * 2 * (position + 1) + margin,
+                ),
                 self.stat_font_type,
                 self.stat_font_scale,
                 color,
@@ -338,7 +357,9 @@ class FaceMaskDetector:
         visible_fraction = total_classified / total_people if total_people else 0
 
         title_height = int(1.5 * self.stat_font_h + 3 * self.stat_margin)
-        radius = (self.stat_box_w - self.stat_margin) // 4  # Leave stat_margin between circles
+        radius = (
+            self.stat_box_w - self.stat_margin
+        ) // 4  # Leave stat_margin between circles
         box_h = 2 * radius + title_height
 
         # Align from top
@@ -350,7 +371,10 @@ class FaceMaskDetector:
         cv2.putText(
             frame,
             "Accumulated results",
-            (box_x + self.stat_margin, int(box_y + 2 * self.stat_margin + 1.5 * self.stat_font_h)),
+            (
+                box_x + self.stat_margin,
+                int(box_y + 2 * self.stat_margin + 1.5 * self.stat_font_h),
+            ),
             self.stat_font_type,
             self.stat_font_scale,
             self.color_stats,
@@ -387,7 +411,10 @@ class FaceMaskDetector:
                 cv2.LINE_AA,
             )
         for n_line, text_line in enumerate(
-            ["Wearing mask: ", f" {100*mask_fraction:.0f}%  [{total_mask}/{total_classified}]"]
+            [
+                "Wearing mask: ",
+                f" {100*mask_fraction:.0f}%  [{total_mask}/{total_classified}]",
+            ]
         ):
             cv2.putText(
                 frame,
@@ -404,7 +431,10 @@ class FaceMaskDetector:
             )
 
         # Second circle: visible fraction
-        center = (box_x + 2 * self.stat_margin + 3 * radius, box_y + radius + title_height)
+        center = (
+            box_x + 2 * self.stat_margin + 3 * radius,
+            box_y + radius + title_height,
+        )
         angle_visible = int(360 * visible_fraction)
         # Non visible people arc
         if angle_visible > 0:
@@ -452,37 +482,14 @@ class FaceMaskDetector:
                 cv2.LINE_AA,
             )
 
-    def _move_faces_to_batch(tracked_people):
-        """
-        Move and combine face images from all person.recent_detected_faces
-        to a single batch list for the classifier, and a matching person list
-        with corresponding indices in another list of the same length.
-        """
-        batch_people = []
-        batch_images = []
-        for person in tracked_people:
-            if person.recent_detected_faces:
-                batch_images.extend(
-                    [Image.fromarray(face) for face in person.recent_detected_faces]
-                )
-                batch_people.extend([person] * len(person.recent_detected_faces))
-
-            # Initialize voting even if face was never visible
-            person.recent_detected_faces = []
-        return batch_images, batch_people
-
     def classify_people(self, tracked_people):
         batch_people = []
         if self.fn_classify_people is not None:
             people_with_faces = [
-                person for person in tracked_people if person.last_detected_face is not None
+                person for person in tracked_people if person.face_detected
             ]
             batch_mask_scores = self.fn_classify_people(people_with_faces)
             batch_people = [person for person in people_with_faces]
-        elif self.fn_classify_faces is not None and self.step % self.classification_batch:
-            batch_images, batch_people = self._move_faces_to_batch(tracked_people)
-            if batch_people:
-                batch_mask_scores = self.fn_classify_faces(batch_images)
 
         if batch_people:
             if self.classification_voting:
@@ -501,14 +508,17 @@ class FaceMaskDetector:
             # Clip range if max_votes is not null
             if self.max_votes:
                 self.people_face_votes_mask[person.id] = np.clip(
-                    self.people_face_votes_mask[person.id], -self.max_votes, self.max_votes
+                    self.people_face_votes_mask[person.id],
+                    -self.max_votes,
+                    self.max_votes,
                 )
 
     def classify_faces_p(self, batch_mask_scores, batch_people):
         for k, person in enumerate(batch_people):
             # Exponential moving-average filter: new = (new + (N - 1)*old) / N
             self.people_face_mask_p[person.id] = (
-                batch_mask_scores[k] + (self.has_mask_N - 1) * self.people_face_mask_p[person.id]
+                batch_mask_scores[k]
+                + (self.has_mask_N - 1) * self.people_face_mask_p[person.id]
             ) / self.has_mask_N
 
     def draw_panel_faces(self, frame, tracked_people):
@@ -534,23 +544,35 @@ class FaceMaskDetector:
             ("Currently wearing mask", people_mask, self.color_mask),
             ("Currently unknown", people_unknown, self.color_unknown),
         ):
-            box_x, box_y = self._register_panel(frame, self.stat_facebox_h, margin=margin)
+            box_x, box_y = self._register_panel(
+                frame, self.stat_facebox_h, margin=margin
+            )
             self._draw_debug_faces_pos(
                 frame,
                 people,
-                (box_x, box_y, self.stat_box_w, self.stat_facebox_h,),
+                (
+                    box_x,
+                    box_y,
+                    self.stat_box_w,
+                    self.stat_facebox_h,
+                ),
                 (face_size, face_size),
                 title,
                 color,
                 margin,
             )
 
-    def _draw_debug_faces_pos(self, frame, people, box_xywh, face_size, title, color, margin):
+    def _draw_debug_faces_pos(
+        self, frame, people, box_xywh, face_size, title, color, margin
+    ):
         box_x, box_y, box_w, box_h = box_xywh
         cv2.putText(
             frame,
             title,
-            (box_x + margin, box_y + self.stat_font_h + margin,),
+            (
+                box_x + margin,
+                box_y + self.stat_font_h + margin,
+            ),
             self.stat_font_type,
             self.stat_font_scale,
             color,
@@ -564,7 +586,9 @@ class FaceMaskDetector:
             person = people[id]
             if person.last_detected_head is not None:
                 head_box = person.last_detected_head
-                head_box = cv2.resize(head_box, face_size, interpolation=cv2.INTER_LINEAR)
+                head_box = cv2.resize(
+                    head_box, face_size, interpolation=cv2.INTER_LINEAR
+                )
                 x_end = c_x + head_box.shape[0]
                 if x_end > box_x + box_w:  # Enter
                     c_x = box_x + margin
@@ -589,14 +613,20 @@ class FaceMaskDetector:
                         dot_color = self.color_no_mask
                     else:
                         dot_color = self.color_unknown
-                    cv2.circle(frame, (v_x, v_y), radius=1, color=dot_color, thickness=-1)
+                    cv2.circle(
+                        frame, (v_x, v_y), radius=1, color=dot_color, thickness=-1
+                    )
                     v_x += vote_spacing
 
                 c_x += head_box.shape[0] + margin
 
         # Draw box around faces after adding all needed rows
         cv2.rectangle(
-            frame, (box_x, box_y), (box_x + box_w, box_y + box_h + margin), color, thickness=1
+            frame,
+            (box_x, box_y),
+            (box_x + box_w, box_y + box_h + margin),
+            color,
+            thickness=1,
         )
 
     def draw_image_into_panel(self, frame, image_path, bottom=True):
@@ -619,6 +649,12 @@ class FaceMaskDetector:
 
     def _overlay_png_image(self, background, image):
         alpha = image[:, :, 3] / 255.0
-        background[:, :, 0] = (1.0 - alpha) * background[:, :, 0] + alpha * image[:, :, 0]
-        background[:, :, 1] = (1.0 - alpha) * background[:, :, 1] + alpha * image[:, :, 1]
-        background[:, :, 2] = (1.0 - alpha) * background[:, :, 2] + alpha * image[:, :, 2]
+        background[:, :, 0] = (1.0 - alpha) * background[:, :, 0] + alpha * image[
+            :, :, 0
+        ]
+        background[:, :, 1] = (1.0 - alpha) * background[:, :, 1] + alpha * image[
+            :, :, 1
+        ]
+        background[:, :, 2] = (1.0 - alpha) * background[:, :, 2] + alpha * image[
+            :, :, 2
+        ]
