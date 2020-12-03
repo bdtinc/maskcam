@@ -42,6 +42,10 @@ class DetectorYoloTRT:
         self.nms_threshold = config["nms_threshold"]
         self.engine_path = config["engine_file"]
         self.class_names = load_class_names(config["names_file"])
+        if "min_detection_size" in config:
+            self.min_size = config["min_detection_size"]
+        else:
+            self.min_size = 0
 
         self.logger = trt.Logger()
         self.runtime = trt.Runtime(self.logger)
@@ -145,6 +149,11 @@ class DetectorYoloTRT:
                 d[1] *= height
                 d[2] *= width
                 d[3] *= height
+                if self.min_size:
+                    detection_width = d[2] - d[0]
+                    detection_height = d[3] - d[1]
+                    if min(detection_height, detection_width) < self.min_size:
+                        break
                 p = d[4]
                 label = self.class_names[d[6]]
                 dets.append(

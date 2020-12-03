@@ -23,7 +23,8 @@ class FaceMaskDetector:
         self.clf_th_vote = config["threshold_vote"]
         self.classification_voting = config["classification_voting"]
         self.box_no_mask = config["box_no_mask"]
-        self.max_votes = config["classification_max_votes"]
+        self.max_votes = config["max_votes"]
+        self.min_votes = config["min_votes"]
 
         self.left_margin = config["left_margin"]
         self.right_margin = config["right_margin"]
@@ -182,23 +183,23 @@ class FaceMaskDetector:
                     self.people_face_mask_p[person.id] = 0.5  # Initial probability
 
             head_box = self.fn_get_person_head(person)
-            if self._validate_box_position(head_box, frame):
+            if self._validate_box_position(head_box, frame) and self._validate_face_size(head_box):
+                # Discard small detections to filter glitches
                 person.last_head_box = head_box
                 self.people_detected.add(person.id)
 
-                if self._validate_face_size(head_box):
-                    # Copy pixels: even if this is drawn in the end
-                    # could be overwritten in async operations like save_faces
-                    cropped_head = frame[
-                        head_box[0][1] : head_box[1][1], head_box[0][0] : head_box[1][0]
-                    ].copy()
-                    person.last_detected_head = cropped_head
-                    person.face_detected = self.fn_person_has_face(person)
+                # Copy pixels: even if this is drawn in the end
+                # could be overwritten in async operations like save_faces
+                cropped_head = frame[
+                    head_box[0][1] : head_box[1][1], head_box[0][0] : head_box[1][0]
+                ].copy()
+                person.last_detected_head = cropped_head
+                person.face_detected = self.fn_person_has_face(person)
 
-                    if person.face_detected:
-                        boxes_face_detected.append(head_box)
-                    else:
-                        boxes_face_invalid.append(head_box)
+                if person.face_detected:
+                    boxes_face_detected.append(head_box)
+                else:
+                    boxes_face_invalid.append(head_box)
 
         self.classify_people(tracked_people)
 
@@ -213,20 +214,20 @@ class FaceMaskDetector:
                 no_mask = False
                 if self.classification_voting:
                     balance_votes = self.people_face_votes_mask[person.id]
-                    total_votes = self.people_face_votes_total[person.id]
-                    if balance_votes > 0 and total_votes > 3:
-                        color = self.color_mask
-                    elif balance_votes < 0 and total_votes > 3:
-                        color = self.color_no_mask
-                        no_mask = True
+                    if abs(balance_votes) >= self.min_votes:
+                        if balance_votes > 0:
+                            color = self.color_mask
+                        else:
+                            color = self.color_no_mask
+                            no_mask = True
                     else:
                         color = self.color_unknown
                     text = f"{np.abs(balance_votes)}"
                 else:
                     mask_p = self.people_face_mask_p[person.id]
-                    if mask_p >= (1 - self.clf_th_vote):
+                    if mask_p >= self.clf_th_vote:
                         color = self.color_mask
-                    elif mask_p <= self.clf_th_vote:
+                    elif mask_p <= (1 - self.clf_th_vote):
                         color = self.color_no_mask
                         no_mask = True
                     else:
@@ -255,17 +256,13 @@ class FaceMaskDetector:
                     cv2.LINE_AA,
                 )
 
+
     def draw_face_boxes(self, frame, boxes_face_detected, boxes_face_invalid):
-        try:
-            for head_box in boxes_face_detected:
-                cv2.rectangle(frame, head_box[0], head_box[1], Color.white, 2)
+        for head_box in boxes_face_detected:
+            cv2.rectangle(frame, head_box[0], head_box[1], Color.white, 2)
 
-            for head_box in boxes_face_invalid:
-                cv2.rectangle(frame, head_box[0], head_box[1], Color.black, 2)
-        except:
-            import ipdb
-
-            ipdb.set_trace()
+        for head_box in boxes_face_invalid:
+            cv2.rectangle(frame, head_box[0], head_box[1], Color.black, 2)
 
     def draw_margins(self, frame):
 
@@ -298,17 +295,16 @@ class FaceMaskDetector:
         if self.classification_voting:
             for person_id in self.people_face_votes_total:
                 balance_votes = self.people_face_votes_mask[person_id]
-                total_votes = self.people_face_votes_total[person_id]
-                if total_votes >= 3 and balance_votes != 0:
+                if abs(balance_votes) >= self.min_votes:
                     total_classified += 1
                     if balance_votes > 0:
                         total_mask += 1
         else:
             for person_id in self.people_face_votes_total:
                 mask_p = self.people_face_mask_p[person_id]
-                if mask_p <= self.clf_th_vote:
+                if mask_p <= 1 - self.clf_th_vote:
                     total_classified += 1
-                elif mask_p >= 1 - self.clf_th_vote:
+                elif mask_p >= self.clf_th_vote:
                     total_classified += 1
                     total_mask += 1
         total_people = len(self.people_detected)
@@ -500,9 +496,9 @@ class FaceMaskDetector:
     def classify_faces_voting(self, batch_mask_scores, batch_people):
         for k, person in enumerate(batch_people):
             self.people_face_votes_total[person.id] += 1
-            if batch_mask_scores[k] >= (1 - self.clf_th_vote):
+            if batch_mask_scores[k] >= self.clf_th_vote:
                 self.people_face_votes_mask[person.id] += 1
-            elif batch_mask_scores[k] <= self.clf_th_vote:
+            elif batch_mask_scores[k] <= (1 - self.clf_th_vote):
                 self.people_face_votes_mask[person.id] -= 1
 
             # Clip range if max_votes is not null

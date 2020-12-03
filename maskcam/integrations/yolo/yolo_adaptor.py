@@ -13,11 +13,14 @@ class YoloAdaptor:
         p_masks = []
         for d in tracked_people:
             meta = d.last_detection.data
-            p_mask = 0.5
             if meta["label"] == "mask":
                 p_mask = float(meta["p"])
             elif meta["label"] == "no_mask" or meta["label"] == "misplaced":
                 p_mask = 1 - float(meta["p"])
+            elif meta["label"] == "not_visible":
+                p_mask = 0.5
+            else:
+                raise  # Unknown label
             p_masks.append(p_mask)
         return p_masks
 
@@ -76,4 +79,16 @@ class YoloAdaptor:
                 1,
                 cv2.LINE_AA,
             )
+            # # Draw debugging info
+            # cv2.putText(
+            #     frame,
+            #     f"width: {bbox[1][0] - bbox[0][0]}",
+            #     (bbox[1][0], bbox[1][1] + 10),
+            #     cv2.FONT_HERSHEY_SIMPLEX,
+            #     0.5,
+            #     color,
+            #     1,
+            #     cv2.LINE_AA,
+            # )
+
 

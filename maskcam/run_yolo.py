@@ -59,8 +59,8 @@ tracker = Tracker(
     detection_threshold=pose_adaptor.detection_threshold,
     distance_threshold=pose_adaptor.distance_threshold,
     point_transience=8,
-    hit_inertia_min=20,
-    hit_inertia_max=40,
+    hit_inertia_min=25,
+    hit_inertia_max=60,
 )
 
 # Video handler (Norfair)

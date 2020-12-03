@@ -22,7 +22,7 @@ mobilenetv2:
   label_map: {1: "mask", 2: "no_mask", 3: "not_visible", 4: "misplaced"}
 
 yolo_generic:
-  detection_threshold: 0.5
+  detection_threshold: 0.9
   nms_threshold: 0.1
   distance_threshold: 1
   yolo_variant: "yolo_trt_tiny"  # One of the configurations below
@@ -58,21 +58,23 @@ yolo_trt_tiny:
   names_file: ../yolo/data/obj.names
   # engine_file: ../yolo/yolov4-facemask-tiny-fp16.trt
   # engine_file: ../../tensorrt_batch8_fp16.trt
-  engine_file: ../yolo/facemask_y4tiny_1024_608_fp16.trt
+  engine_file: ../../yolo/yolov4_tiny_608_1024_fp16.trt
   use_cuda: true
   input_width: 1024
   input_height: 608
   batch_size: 1
+  min_detection_size: 16  # Also see: face_min_size in face_mask_detector
 
 face_mask_detector:
-  threshold_vote: 0.8
+  threshold_vote: 0.5
   extract_faces_step: 5
   face_min_size: 16
   classification_voting: true
   box_no_mask: true
   stat_box_side: "left"
   resolution: ""  # could be "4k", "hd" or nothing
-  classification_max_votes: 100
+  max_votes: 100
+  min_votes: 10
 
   # Default params
   left_margin: 0
@@ -85,9 +87,9 @@ debug:
   tracker_enabled: true
   facemask_enabled: true
   output_detector_resolution: false
-  draw_detections: true
-  draw_tracking_ids: true
+  draw_tracking_ids: false
   draw_tracking_debug: false
   draw_predictions: false
+  draw_detections: false
   draw_face_boxes: false
   profiler: true
