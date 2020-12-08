@@ -2,6 +2,7 @@
 backup/
 videos/inputs/*
 videos/outputs/*
+*.mp4
 .DS_Store
 *.onnx
 .vscode/
