@@ -36,20 +36,21 @@ from common.bus_call import bus_call
 
 import pyds
 
-PGIE_CLASS_ID_VEHICLE = 0
-PGIE_CLASS_ID_BICYCLE = 1
-PGIE_CLASS_ID_PERSON = 2
-PGIE_CLASS_ID_ROADSIGN = 3
+# See ../yolo/data/obj.names
+PGIE_CLASS_ID_MASK = 0
+PGIE_CLASS_ID_NO_MASK = 1
+PGIE_CLASS_ID_NOT_VISIBLE = 2
+PGIE_CLASS_ID_MISPLACED = 3
 
 
 def osd_sink_pad_buffer_probe(pad, info, u_data):
     frame_number = 0
     # Intiallizing object counter with 0.
     obj_counter = {
-        PGIE_CLASS_ID_VEHICLE: 0,
-        PGIE_CLASS_ID_PERSON: 0,
-        PGIE_CLASS_ID_BICYCLE: 0,
-        PGIE_CLASS_ID_ROADSIGN: 0,
+        PGIE_CLASS_ID_MASK: 0,
+        PGIE_CLASS_ID_NO_MASK: 0,
+        PGIE_CLASS_ID_NOT_VISIBLE: 0,
+        PGIE_CLASS_ID_MISPLACED: 0,
     }
     num_rects = 0
 
@@ -103,11 +104,11 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
         # memory will not be claimed by the garbage collector.
         # Reading the display_text field here will return the C address of the
         # allocated string. Use pyds.get_string() to get the string content.
-        py_nvosd_text_params.display_text = "Frame Number={} Number of Objects={} Vehicle_count={} Person_count={}".format(
+        py_nvosd_text_params.display_text = "Frame Number={} Number of Objects={} With mask={} No mask/misplaced={}".format(
             frame_number,
             num_rects,
-            obj_counter[PGIE_CLASS_ID_VEHICLE],
-            obj_counter[PGIE_CLASS_ID_PERSON],
+            obj_counter[PGIE_CLASS_ID_MASK],
+            obj_counter[PGIE_CLASS_ID_NO_MASK] + obj_counter[PGIE_CLASS_ID_MISPLACED],
         )
 
         # Now set the offsets where the string should appear
@@ -288,11 +289,12 @@ def main(args):
     sink.set_property("sync", 0)
     sink.set_property("async", 0)
 
-    streammux.set_property("width", 1024)  # 1920
-    streammux.set_property("height", 576)  # 1080
+    # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
+    streammux.set_property("width", 1024)
+    streammux.set_property("height", 608)
     streammux.set_property("batch-size", 1)
     streammux.set_property("batched-push-timeout", 4000000)
-    pgie.set_property("config-file-path", "dstest1_pgie_config.txt")
+    pgie.set_property("config-file-path", "config_infer_primary_yoloV4.txt")
 
     print("Adding elements to Pipeline \n")
     pipeline.add(source_bin)
