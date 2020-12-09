@@ -58,7 +58,7 @@ yolo_generic:
   distance_threshold: 1
 
   # Set LD_LIBRARY_PATH accordingly  (e.g: /usr/local/cuda-9.0/lib64)
-  yolo_variant: "yolo_darknet_tiny"  # One of the configurations below
+  yolo_variant: "yolo_trt_tiny"  # One of the configurations below
 
 yolo_darknet:  # Config specific to original darknet implementation (detector_darknet.py)
   darknet_path: ../yolo/  # Path with libdarknet.so
@@ -92,7 +92,7 @@ yolo_trt_tiny:
   names_file: ../yolo/data/obj.names
   # engine_file: ../yolo/yolov4-facemask-tiny-fp16.trt
   # engine_file: ../../tensorrt_batch8_fp16.trt
-  engine_file: ../../yolo/yolov4_tiny_608_1024_fp16.trt
+  engine_file: ../yolo/facemask_y4tiny_1024_608_fp16.trt
   use_cuda: true
   input_width: 1024
   input_height: 608
