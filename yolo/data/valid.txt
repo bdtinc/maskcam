@@ -9,6 +9,7 @@ data/obj_train_data/images/stock_3_870.jpg
 data/obj_train_data/images/stock_3_480.jpg
 data/obj_train_data/images/stock_3_1080.jpg
 data/obj_train_data/images/hdstock_2_120.jpg
+data/obj_train_data/images/hdstock_2_330.jpg
 data/obj_train_data/images/demo_many_1020.jpg
 data/obj_train_data/images/demo2_30s_510.jpg
 data/obj_train_data/images/demo2_30s_150.jpg

@@ -156,7 +156,6 @@ data/obj_train_data/images/stock_2_0.jpg
 data/obj_train_data/images/hdstock_2_90.jpg
 data/obj_train_data/images/hdstock_2_60.jpg
 data/obj_train_data/images/hdstock_2_360.jpg
-data/obj_train_data/images/hdstock_2_330.jpg
 data/obj_train_data/images/hdstock_2_300.jpg
 data/obj_train_data/images/hdstock_2_30.jpg
 data/obj_train_data/images/hdstock_2_270.jpg
