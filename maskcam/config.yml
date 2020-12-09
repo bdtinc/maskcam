@@ -1,3 +1,24 @@
+# # Recommended params for yolo_tiny
+# # For normal videos (without much people/overlapping)
+# # we want to filter out false positive detections and rather
+# # be certain about whether each person has a mask or not
+# 
+# nms_threshold: 0.2
+# detection_threshold: 0.5
+# threshold_vote: 0.9
+# tracker.min_hit: 25
+# tracker.max_intertia: 60
+# 
+# # For crowded videos (many people, mainly frontal faces overlapping)
+# # where false positives are less of a problem and we want
+# # to quickly spot any person without a mask
+# 
+# nms_threshold: 0.6
+# detection_threshold: 0.3
+# threshold_vote: 0.5
+# tracker.min_hit: 5
+# tracker.max_inertia: 40
+
 general:
   output_folder: ../videos/outputs/
   draw_classification: true
@@ -12,6 +33,16 @@ video:
   input_width: 0
   input_height: 0
 
+  # # walmart H136, H90 and RPi
+  # input_top: 850
+  # input_left: 0
+  # input_width: 2506
+  # input_height: 1398
+
+tracker:
+  min_hit: 5
+  max_inertia: 40
+
 mobilenetv2:
   # detection_threshold: 0.5
   # nms_threshold: 0.1
@@ -22,10 +53,12 @@ mobilenetv2:
   label_map: {1: "mask", 2: "no_mask", 3: "not_visible", 4: "misplaced"}
 
 yolo_generic:
-  detection_threshold: 0.9
-  nms_threshold: 0.1
+  detection_threshold: 0.5
+  nms_threshold: 0.1  # Lower values filter more
   distance_threshold: 1
-  yolo_variant: "yolo_trt_tiny"  # One of the configurations below
+
+  # Set LD_LIBRARY_PATH accordingly  (e.g: /usr/local/cuda-9.0/lib64)
+  yolo_variant: "yolo_darknet_tiny"  # One of the configurations below
 
 yolo_darknet:  # Config specific to original darknet implementation (detector_darknet.py)
   darknet_path: ../yolo/  # Path with libdarknet.so
@@ -37,7 +70,8 @@ yolo_darknet_tiny:
   darknet_path: ../yolo/  # Path with libdarknet.so
   config_file: ../yolo/facemask-yolov4-tiny.cfg
   data_file: integrations/yolo/obj.data
-  weights_file: ../yolo/facemask-yolov4-tiny_best.weights
+  # weights_file: ../yolo/facemask-yolov4-tiny_best.weights
+  weights_file: ../yolo/backup/facemask-yolov4-tiny_best.weights
 
 yolo_pytorch:
   repo_path: ../yolo/pytorch-YOLOv4
@@ -48,7 +82,7 @@ yolo_pytorch:
 
 yolo_trt:
   names_file: ../yolo/data/obj.names
-  engine_file: ../../yolo/tensorrt_yolo.trt
+  engine_file: ../../yolo/yolov4_608_608_fp16.trt
   use_cuda: true
   input_width: 608
   input_height: 608
@@ -84,12 +118,12 @@ face_mask_detector:
 
 
 debug:
-  tracker_enabled: true
-  facemask_enabled: true
-  output_detector_resolution: false
+  tracker_enabled: false
+  facemask_enabled: false
+  output_detector_resolution: true
   draw_tracking_ids: false
   draw_tracking_debug: false
   draw_predictions: false
-  draw_detections: false
+  draw_detections: true
   draw_face_boxes: false
   profiler: true

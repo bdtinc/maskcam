@@ -12,9 +12,6 @@ class DetectorDarknet:
         os.environ["DARKNET_PATH"] = config["darknet_path"]
         from integrations.yolo import darknet  # noqa
 
-        # Before calling this script, must also add path with libcudart.so
-        # e.g: export LD_LIBRARY_PATH=/usr/local/cuda-9.0/lib64
-
         self.darknet = darknet
         self.detection_threshold = config["detection_threshold"]
         self.nms_threshold = config["nms_threshold"]
@@ -34,8 +31,15 @@ class DetectorDarknet:
         x_left, x_right = x - w / 2, x + w / 2
         y_top, y_bottom = y - h / 2, y + h / 2
         return ((int(x_left), int(y_top)), (int(x_right), int(y_bottom)))
+    
+    def print_profiler(self):
+        print("")
 
     def detect(self, frame, rescale_detections=True):
+        frame_list = type(frame) is list
+        if frame_list:
+            assert len(frame) == 1  # Actual batching not yet implemented here
+            frame = frame[0]  # Remove batch dimension
         orig_height, orig_width = frame.shape[:2]
         frame_resized = cv2.resize(
             frame, (self.width, self.height), interpolation=cv2.INTER_LINEAR
@@ -64,4 +68,7 @@ class DetectorDarknet:
                     np.array(self._yolo_to_bbox((xc, yc, w, h))), data={"label": d[0], "p": d[1]},
                 )
             )
+        if frame_list:  # Add batch dimension
+            dets = [dets]
+            frame_resized = [frame_resized]
         return dets, frame_resized

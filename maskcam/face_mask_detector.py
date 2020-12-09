@@ -522,10 +522,11 @@ class FaceMaskDetector:
         people_no_mask = {}
         people_unknown = {}
         for person in tracked_people:
-            if self.people_face_votes_total[person.id] < 3:
+            balance_votes = self.people_face_votes_mask[person.id]
+            if abs(balance_votes) < self.min_votes:
                 people_unknown[person.id] = person
                 self.people_votes[person.id].append(0)
-            elif self.people_face_votes_mask[person.id] > 0:
+            elif balance_votes > 0:
                 people_mask[person.id] = person
                 self.people_votes[person.id].append(1)
             else:
