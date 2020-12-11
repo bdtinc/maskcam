@@ -272,18 +272,26 @@ def main(args):
     nvvidconv2 = make_elm_or_print_err(
         "nvvideoconvert", "convertor2", "Converter 2 (nvvidconv2)"
     )
+
+    # capsfilter: Optional check
     capsfilter = make_elm_or_print_err("capsfilter", "capsfilter", "capsfilter")
     encoder = make_elm_or_print_err(
-        "avenc_mpeg4", "encoder", "Encoder", preload_reminder
+        "nvv4l2h264enc", "encoder", "Encoder", preload_reminder
     )
-    codeparser = make_elm_or_print_err("mpeg4videoparse", "mpeg4-parser", "Code Parser")
+    # encoder = make_elm_or_print_err(
+    #     "avenc_mpeg4", "encoder", "Encoder", preload_reminder
+    # )
+    # codeparser = make_elm_or_print_err("mpeg4videoparse", "mpeg4-parser", "Code Parser")
+    codeparser = make_elm_or_print_err("h264parse", "h264-parser", "Code Parser")
     container = make_elm_or_print_err("qtmux", "qtmux", "Container")
     sink = make_elm_or_print_err("filesink", "filesink", "Sink")
 
-    caps = Gst.Caps.from_string("video/x-raw, format=I420")
+    # caps = Gst.Caps.from_string("video/x-raw, format=I420")
+    caps = Gst.Caps.from_string("video/x-raw(memory:NVMM), format=I420")
     capsfilter.set_property("caps", caps)
 
-    encoder.set_property("bitrate", 2000000)
+    # encoder.set_property("bitrate", 2000000)
+    encoder.set_property("bitrate", 4000000)  # Nice quality at 1024x576: 4000000
 
     sink.set_property("location", output_filename)
     sink.set_property("sync", 0)
@@ -291,7 +299,11 @@ def main(args):
 
     # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
     streammux.set_property("width", 1024)
-    streammux.set_property("height", 608)
+    streammux.set_property("height", 576)
+    streammux.set_property(
+        "enable-padding", True
+    )  # Keeps aspect ratio, but adds black margin
+
     streammux.set_property("batch-size", 1)
     streammux.set_property("batched-push-timeout", 4000000)
     pgie.set_property("config-file-path", "config_infer_primary_yoloV4.txt")
@@ -330,6 +342,7 @@ def main(args):
     queue.link(nvvidconv2)
     nvvidconv2.link(capsfilter)
     capsfilter.link(encoder)
+    # nvvidconv2.link(encoder)
     encoder.link(codeparser)
     codeparser.link(container)
     container.link(sink)
