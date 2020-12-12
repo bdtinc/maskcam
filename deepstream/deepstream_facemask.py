@@ -23,10 +23,17 @@
 ################################################################################
 
 import sys
+import ipdb
+import configparser
+import numpy as np
 
 sys.path.append(
     "/opt/nvidia/deepstream/deepstream/sources/deepstream_python_apps/apps/"
 )
+sys.path.append("../../norfair")
+sys.path.append("../../filterpy")
+from norfair.tracker import Tracker, Detection
+
 import gi
 
 gi.require_version("Gst", "1.0")
@@ -41,6 +48,38 @@ PGIE_CLASS_ID_MASK = 0
 PGIE_CLASS_ID_NO_MASK = 1
 PGIE_CLASS_ID_NOT_VISIBLE = 2
 PGIE_CLASS_ID_MISPLACED = 3
+
+
+def keypoints_distance(detected_pose, tracked_pose):
+    detected_points = detected_pose.points
+    estimated_pose = tracked_pose.estimate
+    min_box_size = min(
+        max(
+            detected_points[1][0] - detected_points[0][0],  # x2 - x1
+            detected_points[1][1] - detected_points[0][1],  # y2 - y1
+            1,
+        ),
+        max(
+            estimated_pose[1][0] - estimated_pose[0][0],  # x2 - x1
+            estimated_pose[1][1] - estimated_pose[0][1],  # y2 - y1
+            1,
+        ),
+    )
+    mean_distance_normalized = (
+        np.mean(np.linalg.norm(detected_points - estimated_pose, axis=1)) / min_box_size
+    )
+    return mean_distance_normalized
+
+
+# In Norfair we trust
+tracker = Tracker(
+    distance_function=keypoints_distance,
+    detection_threshold=0.5,
+    distance_threshold=1,
+    point_transience=1,
+    hit_inertia_min=25,
+    hit_inertia_max=60,
+)
 
 
 def osd_sink_pad_buffer_probe(pad, info, u_data):
@@ -63,6 +102,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
     # Note that pyds.gst_buffer_get_nvds_batch_meta() expects the
     # C address of gst_buffer as input, which is obtained with hash(gst_buffer)
     batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
+
     l_frame = batch_meta.frame_meta_list
     while l_frame is not None:
         try:
@@ -79,6 +119,8 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
         frame_number = frame_meta.frame_num
         num_rects = frame_meta.num_obj_meta
         l_obj = frame_meta.obj_meta_list
+        detections = []
+        obj_meta_list = []
         while l_obj is not None:
             try:
                 # Casting l_obj.data to pyds.NvDsObjectMeta
@@ -86,47 +128,112 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
                 obj_meta = pyds.NvDsObjectMeta.cast(l_obj.data)
             except StopIteration:
                 break
+            obj_meta_list.append(obj_meta)
             obj_counter[obj_meta.class_id] += 1
             obj_meta.rect_params.border_color.set(0.0, 0.0, 1.0, 0.0)
+            box = obj_meta.rect_params
+            x1, y1, x2, y2 = (
+                box.left,
+                box.top,
+                box.left + box.width,
+                box.top + box.height,
+            )
+            detections.append(
+                Detection(
+                    np.array(((x1, y1), (x2, y2))),
+                    data={"label": obj_meta.obj_label, "p": obj_meta.confidence},
+                )
+            )
             try:
                 l_obj = l_obj.next
             except StopIteration:
                 break
 
+        # Remove all object meta to avoid drawing. Do this outside while since we're modifying list
+        for obj_meta in obj_meta_list:
+            # Remove this to avoid drawing label texts
+            pyds.nvds_remove_obj_meta_from_frame(frame_meta, obj_meta)
+        obj_meta_list = None
+
+        tracked_people = tracker.update(detections)
+
         # Acquiring a display meta object. The memory ownership remains in
         # the C code so downstream plugins can still access it. Otherwise
         # the garbage collector will claim it when this probe function exits.
         display_meta = pyds.nvds_acquire_display_meta_from_pool(batch_meta)
-        display_meta.num_labels = 1
-        py_nvosd_text_params = display_meta.text_params[0]
-        # Setting display text to be shown on screen
-        # Note that the pyds module allocates a buffer for the string, and the
-        # memory will not be claimed by the garbage collector.
-        # Reading the display_text field here will return the C address of the
-        # allocated string. Use pyds.get_string() to get the string content.
-        py_nvosd_text_params.display_text = "Frame Number={} Number of Objects={} With mask={} No mask/misplaced={}".format(
-            frame_number,
-            num_rects,
-            obj_counter[PGIE_CLASS_ID_MASK],
-            obj_counter[PGIE_CLASS_ID_NO_MASK] + obj_counter[PGIE_CLASS_ID_MISPLACED],
-        )
+        # display_meta.num_labels = 1
+        # py_nvosd_text_params = display_meta.text_params[0]
+        # # Setting display text to be shown on screen
+        # # Note that the pyds module allocates a buffer for the string, and the
+        # # memory will not be claimed by the garbage collector.
+        # # Reading the display_text field here will return the C address of the
+        # # allocated string. Use pyds.get_string() to get the string content.
+        # py_nvosd_text_params.display_text = "Frame Number={} Number of Objects={} With mask={} No mask/misplaced={}".format(
+        #     frame_number,
+        #     num_rects,
+        #     obj_counter[PGIE_CLASS_ID_MASK],
+        #     obj_counter[PGIE_CLASS_ID_NO_MASK] + obj_counter[PGIE_CLASS_ID_MISPLACED],
+        # )
 
-        # Now set the offsets where the string should appear
-        py_nvosd_text_params.x_offset = 10
-        py_nvosd_text_params.y_offset = 12
+        # # Now set the offsets where the string should appear
+        # py_nvosd_text_params.x_offset = 10
+        # py_nvosd_text_params.y_offset = 12
 
-        # Font , font-color and font-size
-        py_nvosd_text_params.font_params.font_name = "Serif"
-        py_nvosd_text_params.font_params.font_size = 10
-        # set(red, green, blue, alpha); set to White
-        py_nvosd_text_params.font_params.font_color.set(1.0, 1.0, 1.0, 1.0)
+        # # Font , font-color and font-size
+        # py_nvosd_text_params.font_params.font_name = "Serif"
+        # py_nvosd_text_params.font_params.font_size = 10
+        # # set(red, green, blue, alpha); set to White
+        # py_nvosd_text_params.font_params.font_color.set(1.0, 1.0, 1.0, 1.0)
 
-        # Text background color
-        py_nvosd_text_params.set_bg_clr = 1
-        # set(red, green, blue, alpha); set to Black
-        py_nvosd_text_params.text_bg_clr.set(0.0, 0.0, 0.0, 1.0)
+        # # Text background color
+        # py_nvosd_text_params.set_bg_clr = 1
+        # # set(red, green, blue, alpha); set to Black
+        # py_nvosd_text_params.text_bg_clr.set(0.0, 0.0, 0.0, 1.0)
+
+        # Delete all previous drawings from detector
+        rect_n = 0  # display_meta.num_rects  # Just in case something was drawn before
+        label_n = 0  # display_meta.num_labels
+        for person in tracked_people:
+            if not person.live_points.any():
+                continue
+            points = person.estimate
+            rect = display_meta.rect_params[rect_n]
+            ((x1, y1), (x2, y2)) = points.astype(int)
+            detection_label = person.last_detection.data["label"]
+            detection_p = person.last_detection.data["p"]
+            if detection_label == "mask":
+                color = (0, 1.0, 0)
+            elif detection_label == "no_mask":
+                color = (1.0, 0, 0)
+            else:
+                color = (1.0, 1.0, 0)  # yellow
+            rect.left = x1
+            rect.top = y1
+            rect.width = x2 - x1
+            rect.height = y2 - y1
+            # print(f"{x1} {y1}, {x2} {y2}")
+            # Bug: bg color is always green
+            # rect.has_bg_color = True
+            # rect.bg_color.set(0.5, 0.5, 0.5, 0.6)  # RGBA
+            rect.border_color.set(*color, 1.0)
+            rect.border_width = 2
+            label = display_meta.text_params[label_n]
+            label.x_offset = x1
+            label.y_offset = y2
+            label.font_params.font_name = "Verdana"
+            label.font_params.font_size = 9
+            label.font_params.font_color.set(0, 0, 0, 1.0)
+            label.display_text = f"{person.id} | {detection_p:.2f}"
+            label.set_bg_clr = True
+            label.text_bg_clr.set(*color, 0.5)
+            rect_n += 1
+            label_n += 1
+        display_meta.num_rects = rect_n
+        display_meta.num_labels = label_n
+
         # Using pyds.get_string() to get display_text as string
-        print(pyds.get_string(py_nvosd_text_params.display_text))
+        # print(pyds.get_string(py_nvosd_text_params.display_text))
+        print(".", end="", flush=True)
         pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
         try:
             l_frame = l_frame.next
@@ -223,6 +330,33 @@ def make_elm_or_print_err(factoryname, name, printedname, detail=""):
     return elm
 
 
+def set_tracker_configuration(tracker, config_file):
+    # Set properties of tracker
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    config.sections()
+
+    for key in config["tracker"]:
+        if key == "tracker-width":
+            tracker_width = config.getint("tracker", key)
+            tracker.set_property("tracker-width", tracker_width)
+        if key == "tracker-height":
+            tracker_height = config.getint("tracker", key)
+            tracker.set_property("tracker-height", tracker_height)
+        if key == "gpu-id":
+            tracker_gpu_id = config.getint("tracker", key)
+            tracker.set_property("gpu_id", tracker_gpu_id)
+        if key == "ll-lib-file":
+            tracker_ll_lib_file = config.get("tracker", key)
+            tracker.set_property("ll-lib-file", tracker_ll_lib_file)
+        if key == "ll-config-file":
+            tracker_ll_config_file = config.get("tracker", key)
+            tracker.set_property("ll-config-file", tracker_ll_config_file)
+        if key == "enable-batch-process":
+            tracker_enable_batch_process = config.getint("tracker", key)
+            tracker.set_property("enable_batch_process", tracker_enable_batch_process)
+
+
 def main(args):
     # Check input arguments
     if len(args) != 2:
@@ -260,6 +394,9 @@ def main(args):
     # Create nvstreammux instance to form batches from one or more sources.
     streammux = make_elm_or_print_err("nvstreammux", "Stream-muxer", "NvStreamMux")
     pgie = make_elm_or_print_err("nvinfer", "primary-inference", "pgie")
+
+    # Tracker by nvidia
+    tracker = make_elm_or_print_err("nvtracker", "tracker", "Tracker")
 
     # Use convertor to convert from NV12 to RGBA as required by nvosd
     nvvidconv = make_elm_or_print_err("nvvideoconvert", "convertor", "Nvvidconv")
@@ -306,12 +443,23 @@ def main(args):
 
     streammux.set_property("batch-size", 1)
     streammux.set_property("batched-push-timeout", 4000000)
-    pgie.set_property("config-file-path", "config_infer_primary_yoloV4.txt")
+
+    nvosd.set_property(
+        "process-mode", 2
+    )  # 0: CPU Mode, 1: GPU (only dGPU), 2: VIC (Jetson only)
+
+    # nvosd.set_property("display-bbox", False)  # Bug: Removes all squares
+    nvosd.set_property("display-clock", False)
+    nvosd.set_property("display-text", True)  # Needed for any text
+
+    pgie.set_property("config-file-path", "config_y4tiny.txt")
+    set_tracker_configuration(tracker, "tracker_config.txt")
 
     print("Adding elements to Pipeline \n")
     pipeline.add(source_bin)
     pipeline.add(streammux)
     pipeline.add(pgie)
+    pipeline.add(tracker)
 
     pipeline.add(nvvidconv)
     pipeline.add(nvosd)
@@ -335,8 +483,9 @@ def main(args):
 
     srcpad.link(sinkpad)
     streammux.link(pgie)
-
     pgie.link(nvvidconv)
+    # tracker.link(nvvidconv)
+
     nvvidconv.link(nvosd)
     nvosd.link(queue)
     queue.link(nvvidconv2)
