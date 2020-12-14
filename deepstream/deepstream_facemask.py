@@ -37,7 +37,8 @@ from norfair.tracker import Tracker, Detection
 import gi
 
 gi.require_version("Gst", "1.0")
-from gi.repository import GObject, Gst
+gi.require_version("GstRtspServer", "1.0")
+from gi.repository import GObject, Gst, GstRtspServer
 from common.is_aarch_64 import is_aarch64
 from common.bus_call import bus_call
 
@@ -48,6 +49,10 @@ PGIE_CLASS_ID_MASK = 0
 PGIE_CLASS_ID_NO_MASK = 1
 PGIE_CLASS_ID_NOT_VISIBLE = 2
 PGIE_CLASS_ID_MISPLACED = 3
+
+CODEC_MP4 = "MP4"
+CODEC_H265 = "H265"
+CODEC_H264 = "H264"
 
 
 def keypoints_distance(detected_pose, tracked_pose):
@@ -198,7 +203,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
                 continue
             points = person.estimate
             rect = display_meta.rect_params[rect_n]
-            ((x1, y1), (x2, y2)) = points.astype(int)
+            ((x1, y1), (x2, y2)) = points.clip(0).astype(int)
             detection_label = person.last_detection.data["label"]
             detection_p = person.last_detection.data["p"]
             if detection_label == "mask":
@@ -330,7 +335,7 @@ def make_elm_or_print_err(factoryname, name, printedname, detail=""):
     return elm
 
 
-def set_tracker_configuration(tracker, config_file):
+def set_nvtracker_configuration(tracker, config_file):
     # Set properties of tracker
     config = configparser.ConfigParser()
     config.read(config_file)
@@ -363,6 +368,26 @@ def main(args):
         sys.stderr.write("usage: %s <media file or uri>\n" % args[0])
         sys.exit(1)
 
+    config_nvinfer = "config_y4tiny.txt"
+    nvtracker_enabled = False  # Using Norfair
+    config_nvtracker = "config_nvtracker.txt"
+    codec = CODEC_H265
+    input_filename = args[1]
+    output_filename = f"{input_filename.split('/')[-1].split('.')[0]}_out.mp4"
+    udp_sink_port = 5400
+    # Streaming address: rtsp://<jetson-ip>:<rtsp-port>/<rtsp-address>
+    rtsp_streaming_port = 8554
+    rtsp_streaming_address = "/maskcam"
+    # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
+    output_width = 1024
+    output_height = 576
+    output_bitrate = 4000000  # Nice for h264@1024x576
+    streaming_clock_rate = 90000
+
+    print(f"Playing file {input_filename}")
+    print(f"Output video: {output_filename}")
+    print(f"Output codec: {codec}")
+
     # Standard GStreamer initialization
     GObject.threads_init()
     Gst.init(None)
@@ -385,58 +410,70 @@ def main(args):
         + "export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1\n"
     )
 
-    input_filename = args[1]
-    output_filename = f"{input_filename.split('/')[-1].split('.')[0]}_out.mp4"
-    print(f"Playing file {input_filename}")
-    print(f"Output video: {output_filename}")
-
     source_bin = create_source_bin(0, input_filename)
     # Create nvstreammux instance to form batches from one or more sources.
     streammux = make_elm_or_print_err("nvstreammux", "Stream-muxer", "NvStreamMux")
     pgie = make_elm_or_print_err("nvinfer", "primary-inference", "pgie")
 
-    # Tracker by nvidia
-    tracker = make_elm_or_print_err("nvtracker", "tracker", "Tracker")
+    # Tracker by nvidia (not used, kept just in case)
+    if nvtracker_enabled:
+        tracker = make_elm_or_print_err("nvtracker", "tracker", "Tracker")
 
     # Use convertor to convert from NV12 to RGBA as required by nvosd
-    nvvidconv = make_elm_or_print_err("nvvideoconvert", "convertor", "Nvvidconv")
+    convert_pre_osd = make_elm_or_print_err(
+        "nvvideoconvert", "convert_pre_osd", "Converter NV12->RGBA"
+    )
 
     # Create OSD to draw on the converted RGBA buffer
     nvosd = make_elm_or_print_err("nvdsosd", "onscreendisplay", "OSD (nvosd)")
 
     # Finally encode and save the osd output
     queue = make_elm_or_print_err("queue", "queue", "Queue")
-    nvvidconv2 = make_elm_or_print_err(
-        "nvvideoconvert", "convertor2", "Converter 2 (nvvidconv2)"
+    convert_post_osd = make_elm_or_print_err(
+        "nvvideoconvert", "convert_post_osd", "Converter RGBA->NV12"
     )
 
     # capsfilter: Optional check
     capsfilter = make_elm_or_print_err("capsfilter", "capsfilter", "capsfilter")
-    encoder = make_elm_or_print_err(
-        "nvv4l2h264enc", "encoder", "Encoder", preload_reminder
-    )
-    # encoder = make_elm_or_print_err(
-    #     "avenc_mpeg4", "encoder", "Encoder", preload_reminder
-    # )
-    # codeparser = make_elm_or_print_err("mpeg4videoparse", "mpeg4-parser", "Code Parser")
-    codeparser = make_elm_or_print_err("h264parse", "h264-parser", "Code Parser")
+
+    # Recommended: H265 has more efficient compression
+    if codec == CODEC_MP4:
+        print("Creating MPEG-4 stream")
+        encoder = make_elm_or_print_err(
+            "avenc_mpeg4", "encoder", "Encoder", preload_reminder
+        )
+        codeparser = make_elm_or_print_err(
+            "mpeg4videoparse", "mpeg4-parser", "Code Parser"
+        )
+        rtppay = make_elm_or_print_err("rtpmp4vpay", "rtppay", "RTP MPEG-44 Payload")
+    elif codec == CODEC_H264:
+        print("Creating H264 stream")
+        encoder = make_elm_or_print_err(
+            "nvv4l2h264enc", "encoder", "Encoder", preload_reminder
+        )
+        codeparser = make_elm_or_print_err("h264parse", "h264-parser", "Code Parser")
+        rtppay = make_elm_or_print_err("rtph264pay", "rtppay", "RTP H264 Payload")
+    else:  # Default: H265 (recommended)
+        print("Creating H265 stream")
+        encoder = make_elm_or_print_err(
+            "nvv4l2h265enc", "encoder", "Encoder", preload_reminder
+        )
+        codeparser = make_elm_or_print_err("h265parse", "h265-parser", "Code Parser")
+        rtppay = make_elm_or_print_err("rtph265pay", "rtppay", "RTP H265 Payload")
+
     container = make_elm_or_print_err("qtmux", "qtmux", "Container")
-    sink = make_elm_or_print_err("filesink", "filesink", "Sink")
 
-    # caps = Gst.Caps.from_string("video/x-raw, format=I420")
-    caps = Gst.Caps.from_string("video/x-raw(memory:NVMM), format=I420")
-    capsfilter.set_property("caps", caps)
+    # Split stream into file save and streaming: tee + queues
+    splitter_file_udp = make_elm_or_print_err(
+        "tee", "tee_file_udp", "Splitter file/UDP"
+    )
+    queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
+    queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
+    filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
+    udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
 
-    # encoder.set_property("bitrate", 2000000)
-    encoder.set_property("bitrate", 4000000)  # Nice quality at 1024x576: 4000000
-
-    sink.set_property("location", output_filename)
-    sink.set_property("sync", 0)
-    sink.set_property("async", 0)
-
-    # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
-    streammux.set_property("width", 1024)
-    streammux.set_property("height", 576)
+    streammux.set_property("width", output_width)
+    streammux.set_property("height", output_height)
     streammux.set_property(
         "enable-padding", True
     )  # Keeps aspect ratio, but adds black margin
@@ -444,6 +481,13 @@ def main(args):
     streammux.set_property("batch-size", 1)
     streammux.set_property("batched-push-timeout", 4000000)
 
+    # Inference element
+    pgie.set_property("config-file-path", config_nvinfer)
+
+    if nvtracker_enabled:
+        set_nvtracker_configuration(tracker, config_nvtracker)
+
+    # Nvidia OSD: Drawing element
     nvosd.set_property(
         "process-mode", 2
     )  # 0: CPU Mode, 1: GPU (only dGPU), 2: VIC (Jetson only)
@@ -452,55 +496,111 @@ def main(args):
     nvosd.set_property("display-clock", False)
     nvosd.set_property("display-text", True)  # Needed for any text
 
-    pgie.set_property("config-file-path", "config_y4tiny.txt")
-    set_tracker_configuration(tracker, "tracker_config.txt")
+    # Caps check before encoding
+    if codec == CODEC_MP4:  # Not hw accelerated
+        caps = Gst.Caps.from_string("video/x-raw, format=I420")
+    else:  # hw accelerated
+        caps = Gst.Caps.from_string("video/x-raw(memory:NVMM), format=I420")
+    capsfilter.set_property("caps", caps)
+
+    encoder.set_property(
+        "bitrate", output_bitrate
+    )  # Nice quality w/h264@1024x576: 4000000
+    # Taken from test1_rtsp_out python sample app
+    # Works without this, and it's not documented, keep an eye on this
+    encoder.set_property("preset-level", 1)
+    encoder.set_property("insert-sps-pps", 1)
+    encoder.set_property("bufapi-version", 1)
+
+    # File save
+    filesink.set_property("location", output_filename)
+    filesink.set_property("sync", 0)
+    filesink.set_property("async", 0)
+
+    # Make the UDP sink
+    udpsink.set_property("host", "224.224.255.255")
+    udpsink.set_property("port", udp_sink_port)
+    udpsink.set_property("async", False)
+    udpsink.set_property("sync", 1)
 
     print("Adding elements to Pipeline \n")
     pipeline.add(source_bin)
     pipeline.add(streammux)
     pipeline.add(pgie)
-    pipeline.add(tracker)
+    if nvtracker_enabled:
+        pipeline.add(tracker)
 
-    pipeline.add(nvvidconv)
+    pipeline.add(convert_pre_osd)
     pipeline.add(nvosd)
     pipeline.add(queue)
-    pipeline.add(nvvidconv2)
+    pipeline.add(convert_post_osd)
     pipeline.add(capsfilter)
     pipeline.add(encoder)
     pipeline.add(codeparser)
+    pipeline.add(splitter_file_udp)
+    pipeline.add(queue_file)
+    pipeline.add(queue_udp)
     pipeline.add(container)
-    pipeline.add(sink)
+    pipeline.add(filesink)
+    pipeline.add(rtppay)
+    pipeline.add(udpsink)
 
     print("Linking elements in the Pipeline \n")
 
-    sinkpad = streammux.get_request_pad("sink_0")
-    if not sinkpad:
-        sys.stderr.write(" Unable to get the sink pad of streammux \n")
-
+    # Pipeline Links
     srcpad = source_bin.get_static_pad("src")
-    if not srcpad:
-        sys.stderr.write(" Unable to get source pad of decoder \n")
-
+    sinkpad = streammux.get_request_pad("sink_0")
+    if not srcpad or not sinkpad:
+        sys.stderr.write(" Unable to get file source or mux sink pads \n")
     srcpad.link(sinkpad)
     streammux.link(pgie)
-    pgie.link(nvvidconv)
-    # tracker.link(nvvidconv)
-
-    nvvidconv.link(nvosd)
+    if nvtracker_enabled:
+        pgie.link(tracker)
+        tracker.link(convert_pre_osd)
+    else:
+        pgie.link(convert_pre_osd)
+    convert_pre_osd.link(nvosd)
     nvosd.link(queue)
-    queue.link(nvvidconv2)
-    nvvidconv2.link(capsfilter)
+    queue.link(convert_post_osd)
+    convert_post_osd.link(capsfilter)
     capsfilter.link(encoder)
-    # nvvidconv2.link(encoder)
-    encoder.link(codeparser)
+    encoder.link(splitter_file_udp)
+    # Split stream to file and rtsp
+    tee_file = splitter_file_udp.get_request_pad("src_%u")
+    tee_rtsp = splitter_file_udp.get_request_pad("src_%u")
+    # File output
+    tee_file.link(queue_file.get_static_pad("sink"))
+    queue_file.link(codeparser)
     codeparser.link(container)
-    container.link(sink)
+    container.link(filesink)
+    # RTSP streaming
+    tee_rtsp.link(queue_udp.get_static_pad("sink"))
+    queue_udp.link(rtppay)
+    rtppay.link(udpsink)
 
     # create an event loop and feed gstreamer bus mesages to it
     loop = GObject.MainLoop()
     bus = pipeline.get_bus()
     bus.add_signal_watch()
     bus.connect("message", bus_call, loop)
+
+    # Start streaming
+    server = GstRtspServer.RTSPServer.new()
+    server.props.service = str(rtsp_streaming_port)
+    server.attach(None)
+
+    factory = GstRtspServer.RTSPMediaFactory.new()
+    factory.set_launch(
+        f"( udpsrc name=pay0 port={udp_sink_port} buffer-size=524288"
+        f' caps="application/x-rtp, media=video, clock-rate={streaming_clock_rate},'
+        f' encoding-name=(string){codec}, payload=96 " )'
+    )
+    factory.set_shared(True)
+    server.get_mount_points().add_factory(rtsp_streaming_address, factory)
+
+    print(
+        f"\n\nStreaming at rtsp://<jetson-ip>:{rtsp_streaming_port}{rtsp_streaming_address}\n\n"
+    )
 
     # Lets add probe to get informed of the meta data generated, we add probe to
     # the sink pad of the osd element, since by that time, the buffer would have
