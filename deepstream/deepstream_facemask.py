@@ -22,27 +22,22 @@
 # DEALINGS IN THE SOFTWARE.
 ################################################################################
 
+import gi
+import pyds
 import sys
 import ipdb
+import time
+import platform
 import configparser
 import numpy as np
 
-sys.path.append(
-    "/opt/nvidia/deepstream/deepstream/sources/deepstream_python_apps/apps/"
-)
+gi.require_version("Gst", "1.0")
+gi.require_version("GstRtspServer", "1.0")
+from gi.repository import Gst, GstRtspServer
+
 sys.path.append("../../norfair")
 sys.path.append("../../filterpy")
 from norfair.tracker import Tracker, Detection
-
-import gi
-
-gi.require_version("Gst", "1.0")
-gi.require_version("GstRtspServer", "1.0")
-from gi.repository import GObject, Gst, GstRtspServer
-from common.is_aarch_64 import is_aarch64
-from common.bus_call import bus_call
-
-import pyds
 
 # See ../yolo/data/obj.names
 PGIE_CLASS_ID_MASK = 0
@@ -85,6 +80,10 @@ tracker = Tracker(
     hit_inertia_min=25,
     hit_inertia_max=60,
 )
+
+
+def is_aarch64():
+    return platform.uname()[4] == "aarch64"
 
 
 def osd_sink_pad_buffer_probe(pad, info, u_data):
@@ -389,7 +388,6 @@ def main(args):
     print(f"Output codec: {codec}")
 
     # Standard GStreamer initialization
-    GObject.threads_init()
     Gst.init(None)
 
     # Create gstreamer elements
@@ -578,12 +576,6 @@ def main(args):
     queue_udp.link(rtppay)
     rtppay.link(udpsink)
 
-    # create an event loop and feed gstreamer bus mesages to it
-    loop = GObject.MainLoop()
-    bus = pipeline.get_bus()
-    bus.add_signal_watch()
-    bus.connect("message", bus_call, loop)
-
     # Start streaming
     server = GstRtspServer.RTSPServer.new()
     server.props.service = str(rtsp_streaming_port)
@@ -614,10 +606,29 @@ def main(args):
     # start play back and listen to events
     print("Starting pipeline \n")
     pipeline.set_state(Gst.State.PLAYING)
-    try:
-        loop.run()
-    except:
-        pass
+
+    # create an event loop and feed gstreamer bus mesages to it
+    bus = pipeline.get_bus()
+    running = True
+
+    while running:
+        message = bus.pop()
+        if message is None:
+            time.sleep(10)
+            continue
+
+        t = message.type
+        if t == Gst.MessageType.EOS:
+            sys.stdout.write("End-of-stream\n")
+            running = False
+        elif t == Gst.MessageType.WARNING:
+            err, debug = message.parse_warning()
+            sys.stderr.write("Warning: %s: %s\n" % (err, debug))
+        elif t == Gst.MessageType.ERROR:
+            err, debug = message.parse_error()
+            sys.stderr.write("Error: %s: %s\n" % (err, debug))
+            running = False
+
     # cleanup
     pipeline.set_state(Gst.State.NULL)
 
