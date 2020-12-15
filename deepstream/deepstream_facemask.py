@@ -158,6 +158,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             # Remove this to avoid drawing label texts
             pyds.nvds_remove_obj_meta_from_frame(frame_meta, obj_meta)
         obj_meta_list = None
+        print(f"Num dets: {len(detections)}")
 
         tracked_people = tracker.update(detections)
 
