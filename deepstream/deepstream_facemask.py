@@ -44,6 +44,7 @@ PGIE_CLASS_ID_MASK = 0
 PGIE_CLASS_ID_NO_MASK = 1
 PGIE_CLASS_ID_NOT_VISIBLE = 2
 PGIE_CLASS_ID_MISPLACED = 3
+frame_number = 0
 
 CODEC_MP4 = "MP4"
 CODEC_H265 = "H265"
@@ -87,7 +88,7 @@ def is_aarch64():
 
 
 def osd_sink_pad_buffer_probe(pad, info, u_data):
-    frame_number = 0
+    global frame_number
     # Intiallizing object counter with 0.
     obj_counter = {
         PGIE_CLASS_ID_MASK: 0,
@@ -95,7 +96,6 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
         PGIE_CLASS_ID_NOT_VISIBLE: 0,
         PGIE_CLASS_ID_MISPLACED: 0,
     }
-    num_rects = 0
 
     gst_buffer = info.get_buffer()
     if not gst_buffer:
@@ -121,6 +121,8 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             break
 
         frame_number = frame_meta.frame_num
+        if frame_number == 100:
+            print("Processing frame 100")
         num_rects = frame_meta.num_obj_meta
         l_obj = frame_meta.obj_meta_list
         detections = []
@@ -373,7 +375,6 @@ def main(args):
     config_nvtracker = "config_nvtracker.txt"
     codec = CODEC_H265
     input_filename = args[1]
-    output_filename = f"{input_filename.split('/')[-1].split('.')[0]}_out.mp4"
     udp_sink_port = 5400
     # Streaming address: rtsp://<jetson-ip>:<rtsp-port>/<rtsp-address>
     rtsp_streaming_port = 8554
@@ -385,7 +386,6 @@ def main(args):
     streaming_clock_rate = 90000
 
     print(f"Playing file {input_filename}")
-    print(f"Output video: {output_filename}")
     print(f"Output codec: {codec}")
 
     # Standard GStreamer initialization
@@ -460,15 +460,11 @@ def main(args):
         codeparser = make_elm_or_print_err("h265parse", "h265-parser", "Code Parser")
         rtppay = make_elm_or_print_err("rtph265pay", "rtppay", "RTP H265 Payload")
 
-    container = make_elm_or_print_err("qtmux", "qtmux", "Container")
-
     # Split stream into file save and streaming: tee + queues
     splitter_file_udp = make_elm_or_print_err(
         "tee", "tee_file_udp", "Splitter file/UDP"
     )
-    queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
     queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
-    filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
     udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
 
     streammux.set_property("width", output_width)
@@ -511,11 +507,6 @@ def main(args):
     encoder.set_property("insert-sps-pps", 1)
     encoder.set_property("bufapi-version", 1)
 
-    # File save
-    filesink.set_property("location", output_filename)
-    filesink.set_property("sync", 0)
-    filesink.set_property("async", 0)
-
     # Make the UDP sink
     udpsink.set_property("host", "224.224.255.255")
     udpsink.set_property("port", udp_sink_port)
@@ -537,10 +528,7 @@ def main(args):
     pipeline.add(encoder)
     pipeline.add(codeparser)
     pipeline.add(splitter_file_udp)
-    pipeline.add(queue_file)
     pipeline.add(queue_udp)
-    pipeline.add(container)
-    pipeline.add(filesink)
     pipeline.add(rtppay)
     pipeline.add(udpsink)
 
@@ -565,17 +553,14 @@ def main(args):
     capsfilter.link(encoder)
     encoder.link(splitter_file_udp)
     # Split stream to file and rtsp
-    tee_file = splitter_file_udp.get_request_pad("src_%u")
     tee_rtsp = splitter_file_udp.get_request_pad("src_%u")
-    # File output
-    tee_file.link(queue_file.get_static_pad("sink"))
-    queue_file.link(codeparser)
-    codeparser.link(container)
-    container.link(filesink)
+
     # RTSP streaming
     tee_rtsp.link(queue_udp.get_static_pad("sink"))
     queue_udp.link(rtppay)
     rtppay.link(udpsink)
+
+    # File split is done on request
 
     # Start streaming
     server = GstRtspServer.RTSPServer.new()
@@ -611,24 +596,59 @@ def main(args):
     # create an event loop and feed gstreamer bus mesages to it
     bus = pipeline.get_bus()
     running = True
+    file_save_status = 0
 
     while running:
         message = bus.pop()
-        if message is None:
-            time.sleep(10)
-            continue
+        if message is not None:
+            t = message.type
+            if t == Gst.MessageType.EOS:
+                sys.stdout.write("End-of-stream\n")
+                running = False
+            elif t == Gst.MessageType.WARNING:
+                err, debug = message.parse_warning()
+                sys.stderr.write("Warning: %s: %s\n" % (err, debug))
+            elif t == Gst.MessageType.ERROR:
+                err, debug = message.parse_error()
+                sys.stderr.write("Error: %s: %s\n" % (err, debug))
+                running = False
+        else:
+            time.sleep(10e-3)  # 10 millisecs
 
-        t = message.type
-        if t == Gst.MessageType.EOS:
-            sys.stdout.write("End-of-stream\n")
+        if frame_number >= 100 and file_save_status == 0:
+
+            queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
+            container = make_elm_or_print_err("qtmux", "qtmux", "Container")
+            filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
+
+            # File save
+            output_filename = f"{input_filename.split('/')[-1].split('.')[0]}_out_1.mp4"
+            filesink.set_property("location", output_filename)
+            filesink.set_property("sync", 0)
+            filesink.set_property("async", 0)
+
+            pipeline.add(queue_file)
+            pipeline.add(container)
+            pipeline.add(filesink)
+
+            if not queue_file.sync_state_with_parent():
+                print("Could not add queue file element")
+            if not container.sync_state_with_parent():
+                print("Could not add file container element")
+            if not filesink.sync_state_with_parent():
+                print("Could not add filesink element")
+
+            print(f"Saving file {output_filename}")
+            tee_file = splitter_file_udp.get_request_pad("src_%u")
+            tee_file.link(queue_file.get_static_pad("sink"))
+            queue_file.link(codeparser)
+            codeparser.link(container)
+            container.link(filesink)
+            file_save_status = 1
+        elif frame_number >= 250:
+            print("Finished saving files")
             running = False
-        elif t == Gst.MessageType.WARNING:
-            err, debug = message.parse_warning()
-            sys.stderr.write("Warning: %s: %s\n" % (err, debug))
-        elif t == Gst.MessageType.ERROR:
-            err, debug = message.parse_error()
-            sys.stderr.write("Error: %s: %s\n" % (err, debug))
-            running = False
+            # Disconnect both
 
     # cleanup
     pipeline.set_state(Gst.State.NULL)
