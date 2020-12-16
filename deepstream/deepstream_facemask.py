@@ -121,8 +121,6 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             break
 
         frame_number = frame_meta.frame_num
-        if frame_number == 100:
-            print("Processing frame 100")
         num_rects = frame_meta.num_obj_meta
         l_obj = frame_meta.obj_meta_list
         detections = []
@@ -160,7 +158,6 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             # Remove this to avoid drawing label texts
             pyds.nvds_remove_obj_meta_from_frame(frame_meta, obj_meta)
         obj_meta_list = None
-        print(f"Num dets: {len(detections)}")
 
         tracked_people = tracker.update(detections)
 
@@ -240,7 +237,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
 
         # Using pyds.get_string() to get display_text as string
         # print(pyds.get_string(py_nvosd_text_params.display_text))
-        print(".", end="", flush=True)
+        # print(".", end="", flush=True)
         pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
         try:
             l_frame = l_frame.next
@@ -364,17 +361,43 @@ def set_nvtracker_configuration(tracker, config_file):
             tracker.set_property("enable_batch_process", tracker_enable_batch_process)
 
 
+def cb_filechange_trigger(pad, probe_info, u_data):
+    """
+    Pipeline modification code adapted from C examples provided in:
+    https://gstreamer.freedesktop.org/documentation/application-development/advanced/pipeline-manipulation.html#dynamically-changing-the-pipeline
+    """
+    print("\nTriggering file change")
+    # Remove this blocking probe
+    pad.remove_probe(probe_info.id)
+
+    filesink_element, new_filename, container_element = u_data
+    # container_element.get_static_pad("src").add_probe(
+    #     Gst.PadProbeType.BLOCK | Gst.PadProbeType.EVENT_DOWNSTREAM,
+    #     cb_file_change_handler,
+    #     [filesink_element, new_filename],
+    # )
+    # container_element.get_request_pad("video_%u").send_event(Gst.Event.new_eos())
+    filesink_element.set_state(Gst.State.NULL)
+    filesink_element.set_property("location", new_filename)
+    filesink_element.set_state(Gst.State.PLAYING)
+    return Gst.PadProbeReturn.OK
+
+
 def main(args):
     # Check input arguments
     if len(args) != 2:
-        sys.stderr.write("usage: %s <media file or uri>\n" % args[0])
+        sys.stderr.write("usage: %s file://<video file path>\n" % args[0])
         sys.exit(1)
 
+    input_filename = args[1]
+    output_maxframes_chunk = 30 * 20  # ~20 secs at 30fps
+    output_chunk_basename = (
+        input_filename.split("/")[-1].split(".")[0] + "_chunk_{}_out.mp4"
+    )
     config_nvinfer = "config_y4tiny.txt"
     nvtracker_enabled = False  # Using Norfair
     config_nvtracker = "config_nvtracker.txt"
     codec = CODEC_H265
-    input_filename = args[1]
     udp_sink_port = 5400
     # Streaming address: rtsp://<jetson-ip>:<rtsp-port>/<rtsp-address>
     rtsp_streaming_port = 8554
@@ -464,6 +487,11 @@ def main(args):
     splitter_file_udp = make_elm_or_print_err(
         "tee", "tee_file_udp", "Splitter file/UDP"
     )
+
+    queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
+    container = make_elm_or_print_err("qtmux", "qtmux", "Container")
+    filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
+
     queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
     udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
 
@@ -498,16 +526,24 @@ def main(args):
         caps = Gst.Caps.from_string("video/x-raw(memory:NVMM), format=I420")
     capsfilter.set_property("caps", caps)
 
-    encoder.set_property(
-        "bitrate", output_bitrate
-    )  # Nice quality w/h264@1024x576: 4000000
+    # Nice quality w/h264@1024x576: 4000000
+    encoder.set_property("bitrate", output_bitrate)
+
     # Taken from test1_rtsp_out python sample app
     # Works without this, and it's not documented, keep an eye on this
     encoder.set_property("preset-level", 1)
     encoder.set_property("insert-sps-pps", 1)
     encoder.set_property("bufapi-version", 1)
 
-    # Make the UDP sink
+    # File save
+    output_chunk_number = 1
+    output_chunk_filename = output_chunk_basename.format(output_chunk_number)
+    filesink.set_property("location", output_chunk_filename)
+    filesink.set_property("sync", 0)
+    filesink.set_property("async", 0)
+    print(f"Saving file {output_chunk_filename}")
+
+    # UDP sink
     udpsink.set_property("host", "224.224.255.255")
     udpsink.set_property("port", udp_sink_port)
     udpsink.set_property("async", False)
@@ -528,6 +564,11 @@ def main(args):
     pipeline.add(encoder)
     pipeline.add(codeparser)
     pipeline.add(splitter_file_udp)
+    # Branch 1: file save
+    pipeline.add(queue_file)
+    pipeline.add(container)
+    pipeline.add(filesink)
+    # Branch 2: streaming
     pipeline.add(queue_udp)
     pipeline.add(rtppay)
     pipeline.add(udpsink)
@@ -552,15 +593,21 @@ def main(args):
     convert_post_osd.link(capsfilter)
     capsfilter.link(encoder)
     encoder.link(splitter_file_udp)
+
     # Split stream to file and rtsp
     tee_rtsp = splitter_file_udp.get_request_pad("src_%u")
+    tee_file = splitter_file_udp.get_request_pad("src_%u")
+
+    # File save
+    tee_file.link(queue_file.get_static_pad("sink"))
+    queue_file.link(codeparser)
+    codeparser.link(container)
+    container.link(filesink)
 
     # RTSP streaming
     tee_rtsp.link(queue_udp.get_static_pad("sink"))
     queue_udp.link(rtppay)
     rtppay.link(udpsink)
-
-    # File split is done on request
 
     # Start streaming
     server = GstRtspServer.RTSPServer.new()
@@ -596,13 +643,19 @@ def main(args):
     # create an event loop and feed gstreamer bus mesages to it
     bus = pipeline.get_bus()
     running = True
-    file_save_status = 0
+    chunk_starting_frame = 0
 
     while running:
         message = bus.pop()
         if message is not None:
             t = message.type
+
             if t == Gst.MessageType.EOS:
+                print(f"Received EOS from: {message.src}")
+                if message.src is filesink:
+                    import ipdb
+
+                    ipdb.set_trace()
                 sys.stdout.write("End-of-stream\n")
                 running = False
             elif t == Gst.MessageType.WARNING:
@@ -615,40 +668,18 @@ def main(args):
         else:
             time.sleep(10e-3)  # 10 millisecs
 
-        if frame_number >= 100 and file_save_status == 0:
+        # Create new output file when output_maxframes_chunk are reached
+        if (frame_number - chunk_starting_frame) >= output_maxframes_chunk:
+            chunk_starting_frame = frame_number  # Reset reference
+            output_chunk_number += 1
+            output_chunk_filename = output_chunk_basename.format(output_chunk_number)
 
-            queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
-            container = make_elm_or_print_err("qtmux", "qtmux", "Container")
-            filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
-
-            # File save
-            output_filename = f"{input_filename.split('/')[-1].split('.')[0]}_out_1.mp4"
-            filesink.set_property("location", output_filename)
-            filesink.set_property("sync", 0)
-            filesink.set_property("async", 0)
-
-            pipeline.add(queue_file)
-            pipeline.add(container)
-            pipeline.add(filesink)
-
-            if not queue_file.sync_state_with_parent():
-                print("Could not add queue file element")
-            if not container.sync_state_with_parent():
-                print("Could not add file container element")
-            if not filesink.sync_state_with_parent():
-                print("Could not add filesink element")
-
-            print(f"Saving file {output_filename}")
-            tee_file = splitter_file_udp.get_request_pad("src_%u")
-            tee_file.link(queue_file.get_static_pad("sink"))
-            queue_file.link(codeparser)
-            codeparser.link(container)
-            container.link(filesink)
-            file_save_status = 1
-        elif frame_number >= 250:
-            print("Finished saving files")
-            running = False
-            # Disconnect both
+            # This probe will block the stream and do the file swap
+            queue_file.get_static_pad("src").add_probe(
+                Gst.PadProbeType.BLOCK_DOWNSTREAM,
+                cb_filechange_trigger,
+                [filesink, output_chunk_filename, container],
+            )
 
     # cleanup
     pipeline.set_state(Gst.State.NULL)
