@@ -14,8 +14,8 @@ scipy
 PyYAML
 
 # Pytorch
-torch
-torchvision
+# torch
+# torchvision
 
 # Tracker & video pipeline. Exclude it on Jetson (see README)
-norfair
+# norfair
