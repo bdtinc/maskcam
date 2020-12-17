@@ -45,6 +45,9 @@ PGIE_CLASS_ID_NO_MASK = 1
 PGIE_CLASS_ID_NOT_VISIBLE = 2
 PGIE_CLASS_ID_MISPLACED = 3
 frame_number = 0
+start_time = None
+end_time = None
+total_frames = 0
 
 CODEC_MP4 = "MP4"
 CODEC_H265 = "H265"
@@ -89,6 +92,8 @@ def is_aarch64():
 
 def osd_sink_pad_buffer_probe(pad, info, u_data):
     global frame_number
+    global start_time
+    global total_frames  # Redundant w/ frame_number
     # Intiallizing object counter with 0.
     obj_counter = {
         PGIE_CLASS_ID_MASK: 0,
@@ -106,9 +111,12 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
     # Note that pyds.gst_buffer_get_nvds_batch_meta() expects the
     # C address of gst_buffer as input, which is obtained with hash(gst_buffer)
     batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
+    if not total_frames % 30:
+        print(f"Processed {total_frames} frames...")
 
     l_frame = batch_meta.frame_meta_list
     while l_frame is not None:
+        total_frames += 1
         try:
             # Note that l_frame.data needs a cast to pyds.NvDsFrameMeta
             # The casting is done by pyds.glist_get_nvds_frame_meta()
@@ -243,7 +251,9 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             l_frame = l_frame.next
         except StopIteration:
             break
-
+    # Start timer at the end of first frame processing
+    if start_time is None:
+        start_time = time.time()
     return Gst.PadProbeReturn.OK
 
 
@@ -362,11 +372,17 @@ def set_nvtracker_configuration(tracker, config_file):
 
 
 def main(args):
+    global frame_number
+    global total_frames
+    global start_time
+    global end_time
+
     # Check input arguments
     if len(args) != 2:
         sys.stderr.write("usage: %s file://<video file path>\n" % args[0])
         sys.exit(1)
 
+    benchmark_mode = True
     input_filename = args[1]
     # output_maxframes_chunk = 30 * 20  # ~20 secs at 30fps
     output_chunk_basename = input_filename.split("/")[-1].split(".")[0] + "_{}_out.mp4"
@@ -471,6 +487,9 @@ def main(args):
     queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
     udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
 
+    # Fakesink just in case
+    fakesink = make_elm_or_print_err("fakesink", "fakesink", "Black Hole")
+
     streammux.set_property("width", output_width)
     streammux.set_property("height", output_height)
     streammux.set_property(
@@ -539,15 +558,19 @@ def main(args):
     pipeline.add(capsfilter)
     pipeline.add(encoder)
     pipeline.add(codeparser)
-    pipeline.add(splitter_file_udp)
-    # Branch 1: file save
-    pipeline.add(queue_file)
-    pipeline.add(container)
-    pipeline.add(filesink)
-    # Branch 2: streaming
-    pipeline.add(queue_udp)
-    pipeline.add(rtppay)
-    pipeline.add(udpsink)
+    if not benchmark_mode:
+        pipeline.add(splitter_file_udp)
+        # Branch 1: file save
+        pipeline.add(queue_file)
+        pipeline.add(container)
+        pipeline.add(filesink)
+        # Branch 2: streaming
+        pipeline.add(queue_udp)
+        pipeline.add(rtppay)
+        pipeline.add(udpsink)
+    else:
+        # Branch for benchmarking: sink nowhere
+        pipeline.add(fakesink)
 
     print("Linking elements in the Pipeline \n")
 
@@ -568,40 +591,44 @@ def main(args):
     queue.link(convert_post_osd)
     convert_post_osd.link(capsfilter)
     capsfilter.link(encoder)
-    encoder.link(splitter_file_udp)
+    if benchmark_mode:
+        print("\n\n ------ Running in Benchmark Mode (no file/udp sinks) ------- \n\n")
+        encoder.link(fakesink)
+    else:
+        encoder.link(splitter_file_udp)
 
-    # Split stream to file and rtsp
-    tee_rtsp = splitter_file_udp.get_request_pad("src_%u")
-    tee_file = splitter_file_udp.get_request_pad("src_%u")
+        # Split stream to file and rtsp
+        tee_rtsp = splitter_file_udp.get_request_pad("src_%u")
+        tee_file = splitter_file_udp.get_request_pad("src_%u")
 
-    # File save
-    tee_file.link(queue_file.get_static_pad("sink"))
-    queue_file.link(codeparser)
-    codeparser.link(container)
-    container.link(filesink)
+        # File save
+        tee_file.link(queue_file.get_static_pad("sink"))
+        queue_file.link(codeparser)
+        codeparser.link(container)
+        container.link(filesink)
 
-    # RTSP streaming
-    tee_rtsp.link(queue_udp.get_static_pad("sink"))
-    queue_udp.link(rtppay)
-    rtppay.link(udpsink)
+        # RTSP streaming
+        tee_rtsp.link(queue_udp.get_static_pad("sink"))
+        queue_udp.link(rtppay)
+        rtppay.link(udpsink)
 
-    # Start streaming
-    server = GstRtspServer.RTSPServer.new()
-    server.props.service = str(rtsp_streaming_port)
-    server.attach(None)
+        # Start streaming
+        server = GstRtspServer.RTSPServer.new()
+        server.props.service = str(rtsp_streaming_port)
+        server.attach(None)
 
-    factory = GstRtspServer.RTSPMediaFactory.new()
-    factory.set_launch(
-        f"( udpsrc name=pay0 port={udp_sink_port} buffer-size=524288"
-        f' caps="application/x-rtp, media=video, clock-rate={streaming_clock_rate},'
-        f' encoding-name=(string){codec}, payload=96 " )'
-    )
-    factory.set_shared(True)
-    server.get_mount_points().add_factory(rtsp_streaming_address, factory)
+        factory = GstRtspServer.RTSPMediaFactory.new()
+        factory.set_launch(
+            f"( udpsrc name=pay0 port={udp_sink_port} buffer-size=524288"
+            f' caps="application/x-rtp, media=video, clock-rate={streaming_clock_rate},'
+            f' encoding-name=(string){codec}, payload=96 " )'
+        )
+        factory.set_shared(True)
+        server.get_mount_points().add_factory(rtsp_streaming_address, factory)
 
-    print(
-        f"\n\nStreaming at rtsp://<jetson-ip>:{rtsp_streaming_port}{rtsp_streaming_address}\n\n"
-    )
+        print(
+            f"\n\nStreaming at rtsp://<jetson-ip>:{rtsp_streaming_port}{rtsp_streaming_address}\n\n"
+        )
 
     # Lets add probe to get informed of the meta data generated, we add probe to
     # the sink pad of the osd element, since by that time, the buffer would have
@@ -614,6 +641,7 @@ def main(args):
 
     # start play back and listen to events
     print("Starting pipeline \n")
+    time_start_playing = time.time()
     pipeline.set_state(Gst.State.PLAYING)
 
     # create an event loop and feed gstreamer bus mesages to it
@@ -627,6 +655,7 @@ def main(args):
             t = message.type
 
             if t == Gst.MessageType.EOS:
+                end_time = time.time()
                 print(f"Received EOS from: {message.src}")
                 sys.stdout.write("End-of-stream\n")
                 running = False
@@ -638,10 +667,37 @@ def main(args):
                 sys.stderr.write("Error: %s: %s\n" % (err, debug))
                 running = False
         else:
-            time.sleep(10e-3)  # 10 millisecs
+            time.sleep(1e-3)  # Adds error margin for benchmarking
 
     # cleanup
     pipeline.set_state(Gst.State.NULL)
+    if start_time is not None and end_time is not None:
+
+        # Read inference interval
+        config = configparser.ConfigParser()
+        config.read(config_nvinfer)
+        config.sections()
+        inference_interval = int(config["property"]["interval"])
+
+        total_time = end_time - start_time
+        total_frames = (
+            total_frames - 1
+        )  # Remove first frame as its inference is not counted
+        inference_frames = total_frames // (inference_interval + 1)
+        print(" ---- Profiling ---- ")
+        print(
+            f"Inference frames: {inference_frames} | Processed frames: {total_frames}"
+        )
+        print(
+            f"Time from time_start_playing: {end_time - time_start_playing:.2f} seconds"
+        )
+        print(f"Total time skipping first inference: {total_time:.2f} seconds")
+        print(f"Avg. time/frame: {total_time/total_frames:.4f} secs")
+        print(f"FPS: {total_frames/total_time:.1f} frames/second")
+        if inference_interval != 0:
+            print(
+                f"WARNING: skipping inference every interval={inference_interval} frames"
+            )
 
 
 if __name__ == "__main__":

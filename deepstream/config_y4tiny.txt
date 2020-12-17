@@ -75,7 +75,7 @@ network-type=0
 is-classifier=0
 ## 0=Group Rectangles, 1=DBSCAN, 2=NMS, 3= DBSCAN+NMS Hybrid, 4 = None(No clustering)
 # Skip inference these frames
-interval=1
+interval=0
 cluster-mode=2
 maintain-aspect-ratio=1
 parse-bbox-func-name=NvDsInferParseCustomYoloV4
