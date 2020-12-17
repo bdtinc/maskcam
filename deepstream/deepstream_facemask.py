@@ -376,10 +376,13 @@ def cb_filechange_trigger(pad, probe_info, u_data):
     #     cb_file_change_handler,
     #     [filesink_element, new_filename],
     # )
-    # container_element.get_request_pad("video_%u").send_event(Gst.Event.new_eos())
-    filesink_element.set_state(Gst.State.NULL)
-    filesink_element.set_property("location", new_filename)
-    filesink_element.set_state(Gst.State.PLAYING)
+    print("Sending EOS to container")
+    container_element.send_event(Gst.Event.new_eos())
+    # container_element.set_state(Gst.State.NULL)
+    # filesink_element.set_state(Gst.State.NULL)
+    # filesink_element.set_property("location", new_filename)
+    # filesink_element.set_state(Gst.State.PLAYING)
+    # container_element.set_state(Gst.State.PLAYING)
     return Gst.PadProbeReturn.OK
 
 
@@ -390,7 +393,7 @@ def main(args):
         sys.exit(1)
 
     input_filename = args[1]
-    # output_maxframes_chunk = 30 * 20  # ~20 secs at 30fps
+    output_maxframes_chunk = 30 * 20  # ~20 secs at 30fps
     output_chunk_basename = (
         input_filename.split("/")[-1].split(".")[0] + "_chunk_{}_out.mp4"
     )
@@ -489,11 +492,8 @@ def main(args):
     )
 
     queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
-    filesplit = make_elm_or_print_err(
-        "splitmuxsink", "splitfilesink", "Rolling file saver"
-    )
     container = make_elm_or_print_err("qtmux", "qtmux", "Container")
-    # filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
+    filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
 
     queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
     udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
@@ -539,18 +539,12 @@ def main(args):
     encoder.set_property("bufapi-version", 1)
 
     # File save
-    # filesplit.set_property("async-finalize", True)
-    # filesplit.set_property("muxer-factory", "qtmux")
-    filesplit.set_property("muxer", container)
-    filesplit.set_property("max-size-time", int(10e9))  # Time is in nanoseconds
-    filesplit.set_property("location", output_chunk_basename.format("%02d"))
-
-    # output_chunk_number = 1
-    # output_chunk_filename = output_chunk_basename.format(output_chunk_number)
-    # filesink.set_property("location", output_chunk_filename)
-    # filesink.set_property("sync", 0)
-    # filesink.set_property("async", 0)
-    # print(f"Saving file {output_chunk_filename}")
+    output_chunk_number = 1
+    output_chunk_filename = output_chunk_basename.format(output_chunk_number)
+    filesink.set_property("location", output_chunk_filename)
+    filesink.set_property("sync", 0)
+    filesink.set_property("async", 0)
+    print(f"Saving file {output_chunk_filename}")
 
     # UDP sink
     udpsink.set_property("host", "224.224.255.255")
@@ -575,9 +569,8 @@ def main(args):
     pipeline.add(splitter_file_udp)
     # Branch 1: file save
     pipeline.add(queue_file)
-    pipeline.add(filesplit)
-    # pipeline.add(container)
-    # pipeline.add(filesink)
+    pipeline.add(container)
+    pipeline.add(filesink)
     # Branch 2: streaming
     pipeline.add(queue_udp)
     pipeline.add(rtppay)
@@ -610,10 +603,9 @@ def main(args):
 
     # File save
     tee_file.link(queue_file.get_static_pad("sink"))
-    queue_file.link(filesplit)
-    # queue_file.link(codeparser)
-    # codeparser.link(container)
-    # container.link(filesink)
+    queue_file.link(codeparser)
+    codeparser.link(container)
+    container.link(filesink)
 
     # RTSP streaming
     tee_rtsp.link(queue_udp.get_static_pad("sink"))
@@ -654,7 +646,7 @@ def main(args):
     # create an event loop and feed gstreamer bus mesages to it
     bus = pipeline.get_bus()
     running = True
-    # chunk_starting_frame = 0
+    chunk_starting_frame = 0
 
     while running:
         message = bus.pop()
@@ -662,8 +654,8 @@ def main(args):
             t = message.type
 
             if t == Gst.MessageType.EOS:
-                print(f"\nReceived EOS from: {message.src}")
-                print("End-of-stream")
+                print(f"Received EOS from: {message.src}")
+                sys.stdout.write("End-of-stream\n")
                 running = False
             elif t == Gst.MessageType.WARNING:
                 err, debug = message.parse_warning()
@@ -676,17 +668,17 @@ def main(args):
             time.sleep(10e-3)  # 10 millisecs
 
         # Create new output file when output_maxframes_chunk are reached
-        # if (frame_number - chunk_starting_frame) >= output_maxframes_chunk:
-        #     chunk_starting_frame = frame_number  # Reset reference
-        #     output_chunk_number += 1
-        #     output_chunk_filename = output_chunk_basename.format(output_chunk_number)
+        if (frame_number - chunk_starting_frame) >= output_maxframes_chunk:
+            chunk_starting_frame = frame_number  # Reset reference
+            output_chunk_number += 1
+            output_chunk_filename = output_chunk_basename.format(output_chunk_number)
 
-        #     # This probe will block the stream and do the file swap
-        #     queue_file.get_static_pad("src").add_probe(
-        #         Gst.PadProbeType.BLOCK_DOWNSTREAM,
-        #         cb_filechange_trigger,
-        #         [filesink, output_chunk_filename, container],
-        #     )
+            # This probe will block the stream and do the file swap
+            queue_file.get_static_pad("src").add_probe(
+                Gst.PadProbeType.BLOCK_DOWNSTREAM,
+                cb_filechange_trigger,
+                [filesink, output_chunk_filename, container],
+            )
 
     # cleanup
     pipeline.set_state(Gst.State.NULL)
