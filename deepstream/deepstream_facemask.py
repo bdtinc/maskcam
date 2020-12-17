@@ -361,31 +361,6 @@ def set_nvtracker_configuration(tracker, config_file):
             tracker.set_property("enable_batch_process", tracker_enable_batch_process)
 
 
-def cb_filechange_trigger(pad, probe_info, u_data):
-    """
-    Pipeline modification code adapted from C examples provided in:
-    https://gstreamer.freedesktop.org/documentation/application-development/advanced/pipeline-manipulation.html#dynamically-changing-the-pipeline
-    """
-    print("\nTriggering file change")
-    # Remove this blocking probe
-    pad.remove_probe(probe_info.id)
-
-    filesink_element, new_filename, container_element = u_data
-    # container_element.get_static_pad("src").add_probe(
-    #     Gst.PadProbeType.BLOCK | Gst.PadProbeType.EVENT_DOWNSTREAM,
-    #     cb_file_change_handler,
-    #     [filesink_element, new_filename],
-    # )
-    print("Sending EOS to container")
-    container_element.send_event(Gst.Event.new_eos())
-    # container_element.set_state(Gst.State.NULL)
-    # filesink_element.set_state(Gst.State.NULL)
-    # filesink_element.set_property("location", new_filename)
-    # filesink_element.set_state(Gst.State.PLAYING)
-    # container_element.set_state(Gst.State.PLAYING)
-    return Gst.PadProbeReturn.OK
-
-
 def main(args):
     # Check input arguments
     if len(args) != 2:
@@ -393,10 +368,8 @@ def main(args):
         sys.exit(1)
 
     input_filename = args[1]
-    output_maxframes_chunk = 30 * 20  # ~20 secs at 30fps
-    output_chunk_basename = (
-        input_filename.split("/")[-1].split(".")[0] + "_chunk_{}_out.mp4"
-    )
+    # output_maxframes_chunk = 30 * 20  # ~20 secs at 30fps
+    output_chunk_basename = input_filename.split("/")[-1].split(".")[0] + "_{}_out.mp4"
     config_nvinfer = "config_y4tiny.txt"
     nvtracker_enabled = False  # Using Norfair
     config_nvtracker = "config_nvtracker.txt"
@@ -666,19 +639,6 @@ def main(args):
                 running = False
         else:
             time.sleep(10e-3)  # 10 millisecs
-
-        # Create new output file when output_maxframes_chunk are reached
-        if (frame_number - chunk_starting_frame) >= output_maxframes_chunk:
-            chunk_starting_frame = frame_number  # Reset reference
-            output_chunk_number += 1
-            output_chunk_filename = output_chunk_basename.format(output_chunk_number)
-
-            # This probe will block the stream and do the file swap
-            queue_file.get_static_pad("src").add_probe(
-                Gst.PadProbeType.BLOCK_DOWNSTREAM,
-                cb_filechange_trigger,
-                [filesink, output_chunk_filename, container],
-            )
 
     # cleanup
     pipeline.set_state(Gst.State.NULL)
