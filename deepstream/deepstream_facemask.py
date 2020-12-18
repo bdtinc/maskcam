@@ -129,7 +129,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             break
 
         frame_number = frame_meta.frame_num
-        num_rects = frame_meta.num_obj_meta
+        # num_detections = frame_meta.num_obj_meta
         l_obj = frame_meta.obj_meta_list
         detections = []
         obj_meta_list = []
@@ -169,47 +169,29 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
 
         tracked_people = tracker.update(detections)
 
-        # Acquiring a display meta object. The memory ownership remains in
-        # the C code so downstream plugins can still access it. Otherwise
-        # the garbage collector will claim it when this probe function exits.
-        display_meta = pyds.nvds_acquire_display_meta_from_pool(batch_meta)
-        # display_meta.num_labels = 1
-        # py_nvosd_text_params = display_meta.text_params[0]
-        # # Setting display text to be shown on screen
-        # # Note that the pyds module allocates a buffer for the string, and the
-        # # memory will not be claimed by the garbage collector.
-        # # Reading the display_text field here will return the C address of the
-        # # allocated string. Use pyds.get_string() to get the string content.
-        # py_nvosd_text_params.display_text = "Frame Number={} Number of Objects={} With mask={} No mask/misplaced={}".format(
-        #     frame_number,
-        #     num_rects,
-        #     obj_counter[PGIE_CLASS_ID_MASK],
-        #     obj_counter[PGIE_CLASS_ID_NO_MASK] + obj_counter[PGIE_CLASS_ID_MISPLACED],
-        # )
+        # Filter out people with no live points (don't draw)
+        drawn_people = [person for person in tracked_people if person.live_points.any()]
 
-        # # Now set the offsets where the string should appear
-        # py_nvosd_text_params.x_offset = 10
-        # py_nvosd_text_params.y_offset = 12
+        # Calculate the number of display meta objects we need
+        # Since each meta object carries max 16 rects/labels/etc.
+        total_drawings = len(drawn_people)
+        max_drawings_per_meta = 16  # This is hardcoded, not documented
+        num_metas = total_drawings // max_drawings_per_meta
+        if total_drawings % max_drawings_per_meta != 0:
+            num_metas += 1
 
-        # # Font , font-color and font-size
-        # py_nvosd_text_params.font_params.font_name = "Serif"
-        # py_nvosd_text_params.font_params.font_size = 10
-        # # set(red, green, blue, alpha); set to White
-        # py_nvosd_text_params.font_params.font_color.set(1.0, 1.0, 1.0, 1.0)
+        for n_person, person in enumerate(drawn_people):
+            # Index of this person's drawing in the current meta
+            n_draw = n_person % max_drawings_per_meta
 
-        # # Text background color
-        # py_nvosd_text_params.set_bg_clr = 1
-        # # set(red, green, blue, alpha); set to Black
-        # py_nvosd_text_params.text_bg_clr.set(0.0, 0.0, 0.0, 1.0)
+            if n_draw == 0:  # Initialize meta
+                # Acquiring a display meta object. The memory ownership remains in
+                # the C code so downstream plugins can still access it. Otherwise
+                # the garbage collector will claim it when this probe function exits.
+                display_meta = pyds.nvds_acquire_display_meta_from_pool(batch_meta)
 
-        # Delete all previous drawings from detector
-        rect_n = 0  # display_meta.num_rects  # Just in case something was drawn before
-        label_n = 0  # display_meta.num_labels
-        for person in tracked_people:
-            if not person.live_points.any():
-                continue
             points = person.estimate
-            rect = display_meta.rect_params[rect_n]
+            rect = display_meta.rect_params[n_draw]
             ((x1, y1), (x2, y2)) = points.clip(0).astype(int)
             detection_label = person.last_detection.data["label"]
             detection_p = person.last_detection.data["p"]
@@ -229,7 +211,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             # rect.bg_color.set(0.5, 0.5, 0.5, 0.6)  # RGBA
             rect.border_color.set(*color, 1.0)
             rect.border_width = 2
-            label = display_meta.text_params[label_n]
+            label = display_meta.text_params[n_draw]
             label.x_offset = x1
             label.y_offset = y2
             label.font_params.font_name = "Verdana"
@@ -238,15 +220,14 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             label.display_text = f"{person.id} | {detection_p:.2f}"
             label.set_bg_clr = True
             label.text_bg_clr.set(*color, 0.5)
-            rect_n += 1
-            label_n += 1
-        display_meta.num_rects = rect_n
-        display_meta.num_labels = label_n
 
-        # Using pyds.get_string() to get display_text as string
-        # print(pyds.get_string(py_nvosd_text_params.display_text))
-        # print(".", end="", flush=True)
-        pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
+            display_meta.num_rects = n_draw
+            display_meta.num_labels = n_draw
+
+            # Using pyds.get_string() to get display_text as string
+            # print(pyds.get_string(py_nvosd_text_params.display_text))
+            # print(".", end="", flush=True)
+            pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
         try:
             l_frame = l_frame.next
         except StopIteration:
@@ -382,7 +363,7 @@ def main(args):
         sys.stderr.write("usage: %s file://<video file path>\n" % args[0])
         sys.exit(1)
 
-    benchmark_mode = True
+    benchmark_mode = False
     input_filename = args[1]
     # output_maxframes_chunk = 30 * 20  # ~20 secs at 30fps
     output_chunk_basename = input_filename.split("/")[-1].split(".")[0] + "_{}_out.mp4"
@@ -647,7 +628,6 @@ def main(args):
     # create an event loop and feed gstreamer bus mesages to it
     bus = pipeline.get_bus()
     running = True
-    chunk_starting_frame = 0
 
     while running:
         message = bus.pop()
@@ -656,7 +636,8 @@ def main(args):
 
             if t == Gst.MessageType.EOS:
                 end_time = time.time()
-                print(f"Received EOS from: {message.src}")
+                # print(f"Received EOS from: {message.src}")
+                print(f"Written file: {output_chunk_filename}")
                 sys.stdout.write("End-of-stream\n")
                 running = False
             elif t == Gst.MessageType.WARNING:
