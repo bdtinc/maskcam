@@ -54,6 +54,47 @@ CODEC_H265 = "H265"
 CODEC_H264 = "H264"
 
 
+class FaceMask:
+    def __init__(self, th_detection, th_vote, min_face_size):
+        self.people_votes = {}
+        self.th_detection = th_detection
+        self.th_vote = th_vote
+        self.min_face_size = min_face_size
+        self.min_votes = 10
+        self.color_mask = (0.0, 1.0, 0.0)  # green
+        self.color_no_mask = (1.0, 0.0, 0.0)  # red
+        self.color_unknown = (1.0, 1.0, 0.0)  # yellow
+        self.draw_raw_detections = False
+        self.draw_tracked_people = True
+
+    def validate_detection(self, box_points, score, label):
+        box_width = box_points[1][0] - box_points[0][0]
+        box_height = box_points[1][1] - box_points[0][1]
+        return (
+            min(box_width, box_height) >= self.min_face_size
+            and score >= self.th_detection
+        )
+
+    def add_detection(self, person_id, label, score):
+        if person_id not in self.people_votes:
+            self.people_votes[person_id] = 0
+        if score > self.th_vote:
+            if label == "mask":
+                self.people_votes[person_id] += 1
+            elif label == "no_mask" or "misplaced":
+                self.people_votes[person_id] -= 1
+
+    def get_person_label(self, person_id):
+        person_votes = self.people_votes[person_id]
+        if abs(person_votes) >= self.min_votes:
+            color = self.color_mask if person_votes > 0 else self.color_no_mask
+            label = "mask" if person_votes > 0 else "no mask"
+        else:
+            color = self.color_unknown
+            label = "not visible"
+        return f"{person_id}|{label}({abs(person_votes)})", color
+
+
 def keypoints_distance(detected_pose, tracked_pose):
     detected_points = detected_pose.points
     estimated_pose = tracked_pose.estimate
@@ -75,12 +116,14 @@ def keypoints_distance(detected_pose, tracked_pose):
     return mean_distance_normalized
 
 
+face_mask = FaceMask(0.3, 0.9, 32)
+
 # In Norfair we trust
 tracker = Tracker(
     distance_function=keypoints_distance,
-    detection_threshold=0.5,
+    detection_threshold=face_mask.th_detection,
     distance_threshold=1,
-    point_transience=1,
+    point_transience=8,
     hit_inertia_min=25,
     hit_inertia_max=60,
 )
@@ -88,6 +131,37 @@ tracker = Tracker(
 
 def is_aarch64():
     return platform.uname()[4] == "aarch64"
+
+
+def draw_detection(display_meta, n_draw, box_points, detection_label, color):
+    # print(f"Drawing {n_draw} | {detection_label}")
+    # print(box_points)
+    rect = display_meta.rect_params[n_draw]
+
+    ((x1, y1), (x2, y2)) = box_points
+    rect.left = x1
+    rect.top = y1
+    rect.width = x2 - x1
+    rect.height = y2 - y1
+    # print(f"{x1} {y1}, {x2} {y2}")
+    # Bug: bg color is always green
+    # rect.has_bg_color = True
+    # rect.bg_color.set(0.5, 0.5, 0.5, 0.6)  # RGBA
+    rect.border_color.set(*color, 1.0)
+    rect.border_width = 2
+    label = display_meta.text_params[n_draw]
+    label.x_offset = x1
+    label.y_offset = y2
+    label.font_params.font_name = "Verdana"
+    label.font_params.font_size = 9
+    label.font_params.font_color.set(0, 0, 0, 1.0)  # Black
+    # label.display_text = f"{person.id} | {detection_p:.2f}"
+    label.display_text = detection_label
+    label.set_bg_clr = True
+    label.text_bg_clr.set(*color, 0.5)
+
+    display_meta.num_rects = n_draw + 1
+    display_meta.num_labels = n_draw + 1
 
 
 def osd_sink_pad_buffer_probe(pad, info, u_data):
@@ -144,18 +218,23 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             obj_counter[obj_meta.class_id] += 1
             obj_meta.rect_params.border_color.set(0.0, 0.0, 1.0, 0.0)
             box = obj_meta.rect_params
-            x1, y1, x2, y2 = (
-                box.left,
-                box.top,
-                box.left + box.width,
-                box.top + box.height,
+            # print(f"{obj_meta.obj_label} | {obj_meta.confidence}")
+
+            box_points = (
+                (box.left, box.top),
+                (box.left + box.width, box.top + box.height),
             )
-            detections.append(
-                Detection(
-                    np.array(((x1, y1), (x2, y2))),
-                    data={"label": obj_meta.obj_label, "p": obj_meta.confidence},
+            box_p = obj_meta.confidence
+            box_label = obj_meta.obj_label
+            if face_mask.validate_detection(box_points, box_p, box_label):
+                det_data = {"label": box_label, "p": box_p}
+                detections.append(
+                    Detection(
+                        np.array(box_points),
+                        data=det_data,
+                    )
                 )
-            )
+                # print(f"Added detection: {det_data}")
             try:
                 l_obj = l_obj.next
             except StopIteration:
@@ -172,62 +251,62 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
         # Filter out people with no live points (don't draw)
         drawn_people = [person for person in tracked_people if person.live_points.any()]
 
-        # Calculate the number of display meta objects we need
-        # Since each meta object carries max 16 rects/labels/etc.
-        total_drawings = len(drawn_people)
+        # Each meta object carries max 16 rects/labels/etc.
         max_drawings_per_meta = 16  # This is hardcoded, not documented
-        num_metas = total_drawings // max_drawings_per_meta
-        if total_drawings % max_drawings_per_meta != 0:
-            num_metas += 1
 
-        for n_person, person in enumerate(drawn_people):
-            # Index of this person's drawing in the current meta
-            n_draw = n_person % max_drawings_per_meta
+        if face_mask.draw_tracked_people:
+            for n_person, person in enumerate(drawn_people):
+                points = person.estimate
+                box_points = points.clip(0).astype(int)
 
-            if n_draw == 0:  # Initialize meta
-                # Acquiring a display meta object. The memory ownership remains in
-                # the C code so downstream plugins can still access it. Otherwise
-                # the garbage collector will claim it when this probe function exits.
-                display_meta = pyds.nvds_acquire_display_meta_from_pool(batch_meta)
+                # Update mask votes
+                face_mask.add_detection(
+                    person.id,
+                    person.last_detection.data["label"],
+                    person.last_detection.data["p"],
+                )
+                label, color = face_mask.get_person_label(person.id)
 
-            points = person.estimate
-            rect = display_meta.rect_params[n_draw]
-            ((x1, y1), (x2, y2)) = points.clip(0).astype(int)
-            detection_label = person.last_detection.data["label"]
-            detection_p = person.last_detection.data["p"]
-            if detection_label == "mask":
-                color = (0, 1.0, 0)
-            elif detection_label == "no_mask":
-                color = (1.0, 0, 0)
-            else:
-                color = (1.0, 1.0, 0)  # yellow
-            rect.left = x1
-            rect.top = y1
-            rect.width = x2 - x1
-            rect.height = y2 - y1
-            # print(f"{x1} {y1}, {x2} {y2}")
-            # Bug: bg color is always green
-            # rect.has_bg_color = True
-            # rect.bg_color.set(0.5, 0.5, 0.5, 0.6)  # RGBA
-            rect.border_color.set(*color, 1.0)
-            rect.border_width = 2
-            label = display_meta.text_params[n_draw]
-            label.x_offset = x1
-            label.y_offset = y2
-            label.font_params.font_name = "Verdana"
-            label.font_params.font_size = 9
-            label.font_params.font_color.set(0, 0, 0, 1.0)
-            label.display_text = f"{person.id} | {detection_p:.2f}"
-            label.set_bg_clr = True
-            label.text_bg_clr.set(*color, 0.5)
+                # Index of this person's drawing in the current meta
+                n_draw = n_person % max_drawings_per_meta
 
-            display_meta.num_rects = n_draw
-            display_meta.num_labels = n_draw
+                if n_draw == 0:  # Initialize meta
+                    # Acquiring a display meta object. The memory ownership remains in
+                    # the C code so downstream plugins can still access it. Otherwise
+                    # the garbage collector will claim it when this probe function exits.
+                    display_meta = pyds.nvds_acquire_display_meta_from_pool(batch_meta)
+                    pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
+
+                draw_detection(display_meta, n_draw, box_points, label, color)
+
+        # Raw detections
+        if face_mask.draw_raw_detections:
+            for n_detection, detection in enumerate(detections):
+                points = detection.points
+                box_points = points.clip(0).astype(int)
+                label = detection.data["label"]
+                if label == "mask":
+                    color = face_mask.color_mask
+                elif label == "no_mask" or label == "misplaced":
+                    color = face_mask.color_no_mask
+                else:
+                    color = face_mask.color_unknown
+                label = f"{label} | {detection.data['p']:.2f}"
+                n_draw = n_detection % max_drawings_per_meta
+
+                if n_draw == 0:  # Initialize meta
+                    # Acquiring a display meta object. The memory ownership remains in
+                    # the C code so downstream plugins can still access it. Otherwise
+                    # the garbage collector will claim it when this probe function exits.
+                    display_meta = pyds.nvds_acquire_display_meta_from_pool(batch_meta)
+                    pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
+                draw_detection(display_meta, n_draw, box_points, label, color)
 
             # Using pyds.get_string() to get display_text as string
             # print(pyds.get_string(py_nvosd_text_params.display_text))
             # print(".", end="", flush=True)
-            pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
+        # print("")
+
         try:
             l_frame = l_frame.next
         except StopIteration:
@@ -376,9 +455,9 @@ def main(args):
     rtsp_streaming_port = 8554
     rtsp_streaming_address = "/maskcam"
     # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
-    output_width = 1024
-    output_height = 576
-    output_bitrate = 4000000  # Nice for h264@1024x576
+    output_width = 1920
+    output_height = 1080
+    output_bitrate = 8000000  # Nice for h264@1024x576: 4000000
     streaming_clock_rate = 90000
 
     print(f"Playing file {input_filename}")
@@ -502,7 +581,6 @@ def main(args):
         caps = Gst.Caps.from_string("video/x-raw(memory:NVMM), format=I420")
     capsfilter.set_property("caps", caps)
 
-    # Nice quality w/h264@1024x576: 4000000
     encoder.set_property("bitrate", output_bitrate)
 
     # Taken from test1_rtsp_out python sample app

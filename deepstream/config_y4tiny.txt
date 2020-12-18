@@ -59,6 +59,7 @@
 
 [property]
 gpu-id=0
+# Was: 
 net-scale-factor=0.0039215697906911373
 #0=RGB, 1=BGR
 model-color-format=0
@@ -72,18 +73,21 @@ network-mode=2
 num-detected-classes=4
 gie-unique-id=1
 network-type=0
-is-classifier=0
+# is-classifier=0
 ## 0=Group Rectangles, 1=DBSCAN, 2=NMS, 3= DBSCAN+NMS Hybrid, 4 = None(No clustering)
+# Default: 2
+cluster-mode=2
 # Skip inference these frames
 interval=0
-cluster-mode=2
-maintain-aspect-ratio=1
+maintain-aspect-ratio=0
 parse-bbox-func-name=NvDsInferParseCustomYoloV4
 engine-create-func-name=NvDsInferYoloCudaEngineGet
-#scaling-filter=0
-#scaling-compute-hw=0
+scaling-filter=1
+scaling-compute-hw=1
 #output-blob-names=2012
 
 [class-attrs-all]
 nms-iou-threshold=0.2
+
+# Default: 0.4
 pre-cluster-threshold=0.4
