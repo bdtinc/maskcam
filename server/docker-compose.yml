@@ -1,0 +1,43 @@
+version: '3.1'
+services:
+
+  db:
+    image: postgres
+    env_file:
+      - database.env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+
+  mosquitto:
+    image: eclipse-mosquitto
+    ports:
+      - 1883:1883
+      - 8883:8883
+    volumes:
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-logs:/mosquitto/logs
+      - mosquitto-conf:/mosquitto/config
+    restart: unless-stopped
+
+  backend:
+    image: backend
+    volumes:
+      - ./backend:/app
+    build:
+      context: backend
+    depends_on:
+      - db
+    ports:
+      - 80:80
+    command: bash -c "sleep 3 && alembic upgrade head && /start-reload.sh"
+    env_file:
+      - backend.env
+      - database.env
+
+volumes:
+  pgdata:
+  mosquitto-data:
+  mosquitto-logs:
+  mosquitto-conf:
