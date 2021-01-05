@@ -3,7 +3,6 @@ from typing import Optional, Union, List
 from app.db.schema import DeviceModel, database_session
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
 
@@ -30,10 +29,8 @@ def create_device(
         return device
 
     except IntegrityError:
+        database_session.rollback()
         raise
-
-    finally:
-        database_session.close()
 
 
 def get_device(device_id: str) -> Union[DeviceModel, NoResultFound]:
@@ -54,9 +51,6 @@ def get_device(device_id: str) -> Union[DeviceModel, NoResultFound]:
     except NoResultFound:
         raise
 
-    finally:
-        database_session.close()
-
 
 def get_devices() -> List[DeviceModel]:
     """
@@ -66,9 +60,7 @@ def get_devices() -> List[DeviceModel]:
         List[DeviceModel] -- All device instances present in the database.
 
     """
-    devices = database_session.query(DeviceModel).all()
-    database_session.close()
-    return devices
+    return database_session.query(DeviceModel).all()
 
 
 def update_device(
@@ -93,10 +85,8 @@ def update_device(
         return device
 
     except NoResultFound:
+        # database_session.rollback()
         raise
-
-    finally:
-        database_session.close()
 
 
 def delete_device(device_id: str) -> Union[DeviceModel, NoResultFound]:
@@ -118,10 +108,8 @@ def delete_device(device_id: str) -> Union[DeviceModel, NoResultFound]:
         return device
 
     except NoResultFound:
+        # database_session.rollback()
         raise
-
-    finally:
-        database_session.close()
 
 
 def get_device_by_id(device_id: str) -> Union[DeviceModel, NoResultFound]:

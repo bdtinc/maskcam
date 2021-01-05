@@ -5,7 +5,6 @@ from app.db.schema import StatisticsModel, database_session
 from app.db.utils import StatisticTypeEnum
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
 
@@ -49,10 +48,8 @@ def create_statistic(
         return statistic
 
     except IntegrityError:
+        database_session.rollback()
         raise
-
-    finally:
-        database_session.close()
 
 
 def get_statistic(
@@ -76,9 +73,6 @@ def get_statistic(
     except NoResultFound:
         raise
 
-    finally:
-        database_session.close()
-
 
 def get_statistics() -> List[StatisticsModel]:
     """
@@ -88,9 +82,7 @@ def get_statistics() -> List[StatisticsModel]:
         List[StatisticsModel] -- All statistic instances present in the database.
 
     """
-    statistics = database_session.query(StatisticsModel).all()
-    database_session.close()
-    return statistics
+    return database_session.query(StatisticsModel).all()
 
 
 def update_statistic(
@@ -121,9 +113,6 @@ def update_statistic(
     except NoResultFound:
         raise
 
-    finally:
-        database_session.close()
-
 
 def delete_statistic(
     device_id: str, datetime: datetime
@@ -148,9 +137,6 @@ def delete_statistic(
 
     except NoResultFound:
         raise
-
-    finally:
-        database_session.close()
 
 
 def get_statistic_by_id_and_datetime(
