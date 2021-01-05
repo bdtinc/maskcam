@@ -1,35 +1,15 @@
+import json
 import random
 import time
-import json
 from datetime import datetime
 
-from paho.mqtt import client as mqtt_client
-
-
-broker = "localhost"
-port = 1883
-
-# generate client ID with pub prefix randomly
-client_id = f"python-mqtt-{random.randint(0, 1000)}"
-
-
-def connect_mqtt():
-    def on_connect(client, userdata, flags, rc):
-        if rc == 0:
-            print("Connected to MQTT Broker!")
-        else:
-            print("Failed to connect, return code %d\n", rc)
-
-    client = mqtt_client.Client(client_id)
-    client.on_connect = on_connect
-    client.connect(broker, port)
-    return client
+from broker import connect_mqtt_broker
 
 
 def publish(client):
     msg_count = 0
     while True:
-        time.sleep(5)
+        time.sleep(1)
 
         device_id = f"device_{msg_count}"
 
@@ -47,7 +27,7 @@ def publish(client):
             print(f"Failed to send message to topic {topic}")
 
         # Test alert
-        time.sleep(2)
+        time.sleep(1)
         topic = "alerts"
         people_with_mask = random.randint(0, 1000)
         people_without_mask = random.randint(0, 1000)
@@ -68,7 +48,7 @@ def publish(client):
             print(f"Failed to send message to topic {topic}")
 
         # Test report
-        time.sleep(2)
+        time.sleep(1)
         topic = "receive-from-jetson"
         people_with_mask = random.randint(0, 1000)
         people_without_mask = random.randint(0, 1000)
@@ -92,7 +72,7 @@ def publish(client):
 
 
 def run():
-    client = connect_mqtt()
+    client = connect_mqtt_broker(client_id=f"publisher-{random.randint(0, 10)}")
     client.loop_start()
     publish(client)
 
