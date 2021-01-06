@@ -485,21 +485,39 @@ def main(args):
     )
 
     source_bin = create_source_bin(0, input_filename)
+
     # Create nvstreammux instance to form batches from one or more sources.
     streammux = make_elm_or_print_err("nvstreammux", "Stream-muxer", "NvStreamMux")
+    streammux.set_property("width", output_width)
+    streammux.set_property("height", output_height)
+    streammux.set_property(
+        "enable-padding", True
+    )  # Keeps aspect ratio, but adds black margin
+    streammux.set_property("batch-size", 1)
+    streammux.set_property("batched-push-timeout", 4000000)
+
+    # Inference element: object detection using TRT engine
     pgie = make_elm_or_print_err("nvinfer", "primary-inference", "pgie")
+    pgie.set_property("config-file-path", config_nvinfer)
 
     # Tracker by nvidia (not used, kept just in case)
     if nvtracker_enabled:
         tracker = make_elm_or_print_err("nvtracker", "tracker", "Tracker")
+        set_nvtracker_configuration(tracker, config_nvtracker)
 
     # Use convertor to convert from NV12 to RGBA as required by nvosd
     convert_pre_osd = make_elm_or_print_err(
         "nvvideoconvert", "convert_pre_osd", "Converter NV12->RGBA"
     )
 
-    # Create OSD to draw on the converted RGBA buffer
+    # OSD: to draw on the RGBA buffer
     nvosd = make_elm_or_print_err("nvdsosd", "onscreendisplay", "OSD (nvosd)")
+    nvosd.set_property(
+        "process-mode", 2
+    )  # 0: CPU Mode, 1: GPU (only dGPU), 2: VIC (Jetson only)
+    # nvosd.set_property("display-bbox", False)  # Bug: Removes all squares
+    nvosd.set_property("display-clock", False)
+    nvosd.set_property("display-text", True)  # Needed for any text
 
     # Finally encode and save the osd output
     queue = make_elm_or_print_err("queue", "queue", "Queue")
@@ -507,10 +525,15 @@ def main(args):
         "nvvideoconvert", "convert_post_osd", "Converter RGBA->NV12"
     )
 
-    # capsfilter: Optional check
+    # Video capabilities: check format and GPU/CPU location
     capsfilter = make_elm_or_print_err("capsfilter", "capsfilter", "capsfilter")
+    if codec == CODEC_MP4:  # Not hw accelerated
+        caps = Gst.Caps.from_string("video/x-raw, format=I420")
+    else:  # hw accelerated
+        caps = Gst.Caps.from_string("video/x-raw(memory:NVMM), format=I420")
+    capsfilter.set_property("caps", caps)
 
-    # Recommended: H265 has more efficient compression
+    # Encoder: H265 has more efficient compression
     if codec == CODEC_MP4:
         print("Creating MPEG-4 stream")
         encoder = make_elm_or_print_err(
@@ -535,75 +558,42 @@ def main(args):
         codeparser = make_elm_or_print_err("h265parse", "h265-parser", "Code Parser")
         rtppay = make_elm_or_print_err("rtph265pay", "rtppay", "RTP H265 Payload")
 
-    # Split stream into file save and streaming: tee + queues
-    splitter_file_udp = make_elm_or_print_err(
-        "tee", "tee_file_udp", "Splitter file/UDP"
-    )
-
-    queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
-    container = make_elm_or_print_err("qtmux", "qtmux", "Container")
-    filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
-
-    queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
-    udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
-
-    # Fakesink just in case
-    fakesink = make_elm_or_print_err("fakesink", "fakesink", "Black Hole")
-
-    streammux.set_property("width", output_width)
-    streammux.set_property("height", output_height)
-    streammux.set_property(
-        "enable-padding", True
-    )  # Keeps aspect ratio, but adds black margin
-
-    streammux.set_property("batch-size", 1)
-    streammux.set_property("batched-push-timeout", 4000000)
-
-    # Inference element
-    pgie.set_property("config-file-path", config_nvinfer)
-
-    if nvtracker_enabled:
-        set_nvtracker_configuration(tracker, config_nvtracker)
-
-    # Nvidia OSD: Drawing element
-    nvosd.set_property(
-        "process-mode", 2
-    )  # 0: CPU Mode, 1: GPU (only dGPU), 2: VIC (Jetson only)
-
-    # nvosd.set_property("display-bbox", False)  # Bug: Removes all squares
-    nvosd.set_property("display-clock", False)
-    nvosd.set_property("display-text", True)  # Needed for any text
-
-    # Caps check before encoding
-    if codec == CODEC_MP4:  # Not hw accelerated
-        caps = Gst.Caps.from_string("video/x-raw, format=I420")
-    else:  # hw accelerated
-        caps = Gst.Caps.from_string("video/x-raw(memory:NVMM), format=I420")
-    capsfilter.set_property("caps", caps)
-
     encoder.set_property("bitrate", output_bitrate)
-
     # Taken from test1_rtsp_out python sample app
     # Works without this, and it's not documented, keep an eye on this
     encoder.set_property("preset-level", 1)
     encoder.set_property("insert-sps-pps", 1)
     encoder.set_property("bufapi-version", 1)
 
-    # File save
-    output_chunk_number = 1
-    output_chunk_filename = output_chunk_basename.format(output_chunk_number)
-    filesink.set_property("location", output_chunk_filename)
-    filesink.set_property("sync", 0)
-    filesink.set_property("async", 0)
-    print(f"Saving file {output_chunk_filename}")
+    if benchmark_mode:
+        # Fakesink for benchmarking (don't save video or stream)
+        fakesink = make_elm_or_print_err("fakesink", "fakesink", "Black Hole")
+    else:
+        # Split stream into file save and streaming: tee + queues
+        splitter_file_udp = make_elm_or_print_err(
+            "tee", "tee_file_udp", "Splitter file/UDP"
+        )
 
-    # UDP sink
-    udpsink.set_property("host", "224.224.255.255")
-    udpsink.set_property("port", udp_sink_port)
-    udpsink.set_property("async", False)
-    udpsink.set_property("sync", 1)
+        # File saving
+        queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
+        container = make_elm_or_print_err("qtmux", "qtmux", "Container")
+        filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
+        output_chunk_number = 1
+        output_chunk_filename = output_chunk_basename.format(output_chunk_number)
+        filesink.set_property("location", output_chunk_filename)
+        filesink.set_property("sync", 0)
+        filesink.set_property("async", 0)
+        print(f"Saving file {output_chunk_filename}")
 
-    print("Adding elements to Pipeline \n")
+        # UDP streaming
+        queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
+        udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
+        udpsink.set_property("host", "224.224.255.255")
+        udpsink.set_property("port", udp_sink_port)
+        udpsink.set_property("async", False)
+        udpsink.set_property("sync", 1)
+
+    # Add elements to the pipeline
     pipeline.add(source_bin)
     pipeline.add(streammux)
     pipeline.add(pgie)
@@ -617,7 +607,10 @@ def main(args):
     pipeline.add(capsfilter)
     pipeline.add(encoder)
     pipeline.add(codeparser)
-    if not benchmark_mode:
+    if benchmark_mode:
+        # Branch for benchmarking: sink nowhere
+        pipeline.add(fakesink)
+    else:
         pipeline.add(splitter_file_udp)
         # Branch 1: file save
         pipeline.add(queue_file)
@@ -627,9 +620,6 @@ def main(args):
         pipeline.add(queue_udp)
         pipeline.add(rtppay)
         pipeline.add(udpsink)
-    else:
-        # Branch for benchmarking: sink nowhere
-        pipeline.add(fakesink)
 
     print("Linking elements in the Pipeline \n")
 
