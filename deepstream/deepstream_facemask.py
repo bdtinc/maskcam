@@ -27,13 +27,14 @@ import pyds
 import sys
 import ipdb
 import time
+import signal
 import platform
 import configparser
 import numpy as np
 
 gi.require_version("Gst", "1.0")
 gi.require_version("GstRtspServer", "1.0")
-from gi.repository import Gst, GstRtspServer
+from gi.repository import GLib, Gst, GstRtspServer
 
 sys.path.append("../../norfair")
 sys.path.append("../../filterpy")
@@ -48,6 +49,7 @@ frame_number = 0
 start_time = None
 end_time = None
 total_frames = 0
+sigint_received = False
 
 CODEC_MP4 = "MP4"
 CODEC_H265 = "H265"
@@ -129,6 +131,11 @@ tracker = Tracker(
 )
 
 
+def handle_interrupt(sig, frame):
+    global sigint_received
+    sigint_received = True
+
+
 def is_aarch64():
     return platform.uname()[4] == "aarch64"
 
@@ -168,6 +175,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
     global frame_number
     global start_time
     global total_frames  # Redundant w/ frame_number
+    # print(".", end="", flush=True)
     # Intiallizing object counter with 0.
     obj_counter = {
         PGIE_CLASS_ID_MASK: 0,
@@ -436,10 +444,14 @@ def main(args):
     global total_frames
     global start_time
     global end_time
+    global sigint_received
 
     # Check input arguments
+    camera_protocol = "camera://"  # Invented by us since there's no URI for this
     if len(args) != 2:
-        sys.stderr.write("usage: %s file://<video file path>\n" % args[0])
+        sys.stderr.write(
+            f"Usage: {args[0]} [file:// or {camera_protocol}]<video file or camera device path>\n"
+        )
         sys.exit(1)
 
     benchmark_mode = False
@@ -464,6 +476,7 @@ def main(args):
     print(f"Output codec: {codec}")
 
     # Standard GStreamer initialization
+    # GObject.threads_init()  # Doesn't seem necessary (see https://pygobject.readthedocs.io/en/latest/guide/threading.html)
     Gst.init(None)
 
     # Create gstreamer elements
@@ -484,7 +497,35 @@ def main(args):
         + "export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1\n"
     )
 
-    source_bin = create_source_bin(0, input_filename)
+    camera_input = camera_protocol in input_filename
+    if camera_input:
+        input_device = input_filename[len(camera_protocol) :]
+        print(f"Reading from camera device: {input_device}")
+
+        source = make_elm_or_print_err("v4l2src", "v4l2-camera-source", "Camera input")
+        source.set_property("device", input_device)
+
+        # Misterious converting sequence from deepstream_test_1_usb.py
+        caps_v4l2src = make_elm_or_print_err(
+            "capsfilter", "v4l2src_caps", "v4lsrc caps filter"
+        )
+        caps_v4l2src.set_property(
+            "caps", Gst.Caps.from_string("video/x-raw, framerate=30/1")
+        )
+        vidconvsrc = make_elm_or_print_err(
+            "videoconvert", "convertor_src1", "Convertor src 1"
+        )
+        nvvidconvsrc = make_elm_or_print_err(
+            "nvvideoconvert", "convertor_src2", "Convertor src 2"
+        )
+        caps_vidconvsrc = make_elm_or_print_err(
+            "capsfilter", "nvmm_caps", "NVMM caps for input stream"
+        )
+        caps_vidconvsrc.set_property(
+            "caps", Gst.Caps.from_string("video/x-raw(memory:NVMM)")
+        )
+    else:
+        source_bin = create_source_bin(0, input_filename)
 
     # Create nvstreammux instance to form batches from one or more sources.
     streammux = make_elm_or_print_err("nvstreammux", "Stream-muxer", "NvStreamMux")
@@ -594,7 +635,14 @@ def main(args):
         udpsink.set_property("sync", 1)
 
     # Add elements to the pipeline
-    pipeline.add(source_bin)
+    if camera_input:
+        pipeline.add(source)
+        pipeline.add(caps_v4l2src)
+        pipeline.add(vidconvsrc)
+        pipeline.add(nvvidconvsrc)
+        pipeline.add(caps_vidconvsrc)
+    else:
+        pipeline.add(source_bin)
     pipeline.add(streammux)
     pipeline.add(pgie)
     if nvtracker_enabled:
@@ -624,7 +672,14 @@ def main(args):
     print("Linking elements in the Pipeline \n")
 
     # Pipeline Links
-    srcpad = source_bin.get_static_pad("src")
+    if camera_input:
+        source.link(caps_v4l2src)
+        caps_v4l2src.link(vidconvsrc)
+        vidconvsrc.link(nvvidconvsrc)
+        nvvidconvsrc.link(caps_vidconvsrc)
+        srcpad = caps_vidconvsrc.get_static_pad("src")
+    else:
+        srcpad = source_bin.get_static_pad("src")
     sinkpad = streammux.get_request_pad("sink_0")
     if not srcpad or not sinkpad:
         sys.stderr.write(" Unable to get file source or mux sink pads \n")
@@ -689,15 +744,30 @@ def main(args):
     osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, osd_sink_pad_buffer_probe, 0)
 
     # start play back and listen to events
-    print("Starting pipeline \n")
+    print("Starting pipeline")
+    print("Press Ctrl+C to stop processing video file or camera and write results")
     time_start_playing = time.time()
     pipeline.set_state(Gst.State.PLAYING)
 
-    # create an event loop and feed gstreamer bus mesages to it
-    bus = pipeline.get_bus()
-    running = True
+    # GLib loop required for RTSP server
+    g_loop = GLib.MainLoop()
+    g_context = g_loop.get_context()
 
+    # GStreamer message bus
+    bus = pipeline.get_bus()
+
+    # SIGINT handler
+    signal.signal(signal.SIGINT, handle_interrupt)
+
+    # Custom event loop
+    running = True
     while running:
+
+        # Workaround to avoid GStreamer to stop on SIGINT, we want EOS signal to propagate
+        if pipeline.current_state is not Gst.State.PLAYING:
+            pipeline.set_state(Gst.State.PLAYING)
+
+        g_context.iteration(may_block=False)
         message = bus.pop()
         if message is not None:
             t = message.type
@@ -715,9 +785,18 @@ def main(args):
                 err, debug = message.parse_error()
                 sys.stderr.write("Error: %s: %s\n" % (err, debug))
                 running = False
-        else:
-            time.sleep(1e-3)  # Adds error margin for benchmarking
+        if sigint_received:
+            print("Interruption signal received. Sending EOS.")
+            sigint_received = False
 
+            # Pipeline will pop EOS when all sinks send EOS
+            if benchmark_mode:
+                fakesink.send_event(Gst.Event.new_eos())
+            else:
+                container.send_event(Gst.Event.new_eos())
+                udpsink.send_event(Gst.Event.new_eos())
+
+    print("Finished processing")
     # cleanup
     pipeline.set_state(Gst.State.NULL)
     if start_time is not None and end_time is not None:
