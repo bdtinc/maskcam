@@ -466,10 +466,19 @@ def main(args):
     # Streaming address: rtsp://<jetson-ip>:<rtsp-port>/<rtsp-address>
     rtsp_streaming_port = 8554
     rtsp_streaming_address = "/maskcam"
+
+    # Input camera configuration
+    # Use ./gst_capabilities.sh to get the list of available capabilities from /dev/video0
+    input_width = 1024
+    input_height = 576
+    camera_capabilities = (
+        f"video/x-raw, framerate=10/1, width={input_width}, height={input_height}"
+    )
+
     # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
     output_width = 1920
     output_height = 1080
-    output_bitrate = 8000000  # Nice for h264@1024x576: 4000000
+    output_bitrate = 4000000  # Nice for h264@1024x576: 4000000
     streaming_clock_rate = 90000
 
     print(f"Playing file {input_filename}")
@@ -510,7 +519,8 @@ def main(args):
             "capsfilter", "v4l2src_caps", "v4lsrc caps filter"
         )
         caps_v4l2src.set_property(
-            "caps", Gst.Caps.from_string("video/x-raw, framerate=30/1")
+            "caps",
+            Gst.Caps.from_string(camera_capabilities),
         )
         vidconvsrc = make_elm_or_print_err(
             "videoconvert", "convertor_src1", "Convertor src 1"
@@ -702,8 +712,8 @@ def main(args):
         encoder.link(splitter_file_udp)
 
         # Split stream to file and rtsp
-        tee_rtsp = splitter_file_udp.get_request_pad("src_%u")
         tee_file = splitter_file_udp.get_request_pad("src_%u")
+        tee_rtsp = splitter_file_udp.get_request_pad("src_%u")
 
         # File save
         tee_file.link(queue_file.get_static_pad("sink"))
@@ -743,24 +753,25 @@ def main(args):
 
     osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, osd_sink_pad_buffer_probe, 0)
 
+    # GLib loop required for RTSP server
+    g_loop = GLib.MainLoop()
+    g_context = g_loop.get_context()
+
+    # Custom SIGINT handler (send EOS to save file correctly)
+    signal.signal(signal.SIGINT, handle_interrupt)
+
+    # GStreamer message bus
+    bus = pipeline.get_bus()
+
+    # Custom event loop, allows saving file on Ctrl+C press
+    running = True
+
     # start play back and listen to events
     print("Starting pipeline")
     print("Press Ctrl+C to stop processing video file or camera and write results")
     time_start_playing = time.time()
     pipeline.set_state(Gst.State.PLAYING)
 
-    # GLib loop required for RTSP server
-    g_loop = GLib.MainLoop()
-    g_context = g_loop.get_context()
-
-    # GStreamer message bus
-    bus = pipeline.get_bus()
-
-    # SIGINT handler
-    signal.signal(signal.SIGINT, handle_interrupt)
-
-    # Custom event loop
-    running = True
     while running:
 
         # Workaround to avoid GStreamer to stop on SIGINT, we want EOS signal to propagate
@@ -799,6 +810,8 @@ def main(args):
     print("Finished processing")
     # cleanup
     pipeline.set_state(Gst.State.NULL)
+
+    # Profiling display
     if start_time is not None and end_time is not None:
 
         # Read inference interval
@@ -812,7 +825,7 @@ def main(args):
             total_frames - 1
         )  # Remove first frame as its inference is not counted
         inference_frames = total_frames // (inference_interval + 1)
-        print(" ---- Profiling ---- ")
+        print(f" ---- Profiling ---- ")
         print(
             f"Inference frames: {inference_frames} | Processed frames: {total_frames}"
         )

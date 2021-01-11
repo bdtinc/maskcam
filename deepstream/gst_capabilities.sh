@@ -1,0 +1,1 @@
+gst-launch-1.0 --gst-debug=v4l2src:5 v4l2src device=/dev/video0 ! fakesink 2>&1 | sed -une '/caps of src/ s/[:;] /\n/gp'
