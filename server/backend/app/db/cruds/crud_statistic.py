@@ -1,31 +1,22 @@
-import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union
 
-from app.db.schema import StatisticsModel, database_session
-from app.db.utils import StatisticTypeEnum
+from app.db.schema import StatisticsModel
 
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
 
 def create_statistic(
-    device_id: str,
-    datetime: datetime,
-    statistic_type: StatisticTypeEnum,
-    people_with_mask: int,
-    people_without_mask: int,
-    people_total: int,
+    db_session: Session, statistic_information: Dict = {}
 ) -> Union[StatisticsModel, IntegrityError]:
     """
     Register new statistic entry.
 
     Arguments:
-        device_id {str} -- Jetson id which sent the information.
-        datetime {datetime} -- Datetime when the device registered the information.
-        statistic_type {StatisticTypeEnum} -- Type of information (ALERT or REPORT).
-        people_with_mask {int} -- Quantity of people using a face mask.
-        people_without_mask {int} -- Quantity of people not using a face mask.
-        people_total {int} -- Total quantity of people registered by the device.
+        db_session {Session} -- Database session.
+        statistic_information {Dict} -- New statistic information.
 
     Returns:
         Union[StatisticsModel, IntegrityError] -- Statistic instance that was added
@@ -33,32 +24,25 @@ def create_statistic(
 
     """
     try:
-        statistic = StatisticsModel(
-            device_id=device_id,
-            datetime=datetime,
-            statistic_type=statistic_type,
-            people_with_mask=people_with_mask,
-            people_without_mask=people_without_mask,
-            people_total=people_total,
-        )
-
-        database_session.add(statistic)
-        database_session.commit()
-        database_session.refresh(statistic)
+        statistic = StatisticsModel(**statistic_information)
+        db_session.add(statistic)
+        db_session.commit()
+        db_session.refresh(statistic)
         return statistic
 
     except IntegrityError:
-        database_session.rollback()
+        db_session.rollback()
         raise
 
 
 def get_statistic(
-    device_id: str, datetime: datetime
+    db_session: Session, device_id: str, datetime: datetime
 ) -> Union[StatisticsModel, NoResultFound]:
     """
     Get a specific statistic.
 
     Arguments:
+        db_session {Session} -- Database session.
         device_id {str} -- Jetson id which sent the information.
         datetime {datetime} -- Datetime when the device registered the information.
 
@@ -68,30 +52,74 @@ def get_statistic(
 
     """
     try:
-        return get_statistic_by_id_and_datetime(device_id, datetime)
+        return get_statistic_by_id_and_datetime(db_session, device_id, datetime)
 
     except NoResultFound:
         raise
 
 
-def get_statistics() -> List[StatisticsModel]:
+def get_statistics(
+    db_session: Session, device_id: Optional[str] = None
+) -> List[StatisticsModel]:
     """
     Get all statistics.
+
+    Arguments:
+        db_session {Session} -- Database session.
 
     Returns:
         List[StatisticsModel] -- All statistic instances present in the database.
 
     """
-    return database_session.query(StatisticsModel).all()
+    if device_id:
+        query = db_session.query(StatisticsModel)
+        return query.filter(StatisticsModel.device_id == device_id).all()
+
+    else:
+        return db_session.query(StatisticsModel).all()
+
+
+def get_statistics_from_to(
+    db_session: Session,
+    device_id: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+) -> List[StatisticsModel]:
+    """
+    Get all statistics.
+
+    Arguments:
+        db_session {Session} -- Database session.
+
+    Returns:
+        List[StatisticsModel] -- All statistic instances present in the database.
+
+    """
+    query = db_session.query(StatisticsModel)
+    query = query.filter(StatisticsModel.device_id == device_id)
+
+    if to_date is None:
+        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+    if from_date:
+        return query.filter(
+            StatisticsModel.datetime.between(from_date, to_date)
+        ).all()
+
+    return query.filter(StatisticsModel.datetime <= to_date).all()
 
 
 def update_statistic(
-    device_id: str, datetime: datetime, new_statistic_information: Dict = {}
+    db_session: Session,
+    device_id: str,
+    datetime: datetime,
+    new_statistic_information: Dict = {},
 ) -> Union[StatisticsModel, NoResultFound]:
     """
     Modify a specific statistic.
 
     Arguments:
+        db_session {Session} -- Database session.
         device_id {str} -- Jetson id which sent the information.
         datetime {datetime} -- Datetime when the device registered the information.
 
@@ -101,13 +129,25 @@ def update_statistic(
 
     """
     try:
-        statistic = get_statistic_by_id_and_datetime(device_id, datetime)
+        try:
+            del new_statistic_information["device_id"]
+        except KeyError:
+            pass
+
+        try:
+            del new_statistic_information["datetime"]
+        except KeyError:
+            pass
+
+        statistic = get_statistic_by_id_and_datetime(
+            db_session, device_id, datetime
+        )
 
         for key, value in new_statistic_information.items():
             if hasattr(statistic, key):
                 setattr(statistic, key, value)
 
-        database_session.commit()
+        db_session.commit()
         return statistic
 
     except NoResultFound:
@@ -115,12 +155,13 @@ def update_statistic(
 
 
 def delete_statistic(
-    device_id: str, datetime: datetime
+    db_session: Session, device_id: str, datetime: datetime
 ) -> Union[StatisticsModel, NoResultFound]:
     """
     Delete a specific statistic.
 
     Arguments:
+        db_session {Session} -- Database session.
         device_id {str} -- Jetson id which sent the information.
         datetime {datetime} -- Datetime when the device registered the information.
 
@@ -130,9 +171,11 @@ def delete_statistic(
 
     """
     try:
-        statistic = get_statistic_by_id_and_datetime(device_id, datetime)
-        database_session.delete(statistic)
-        database_session.commit()
+        statistic = get_statistic_by_id_and_datetime(
+            db_session, device_id, datetime
+        )
+        db_session.delete(statistic)
+        db_session.commit()
         return statistic
 
     except NoResultFound:
@@ -140,12 +183,13 @@ def delete_statistic(
 
 
 def get_statistic_by_id_and_datetime(
-    device_id: str, datetime: datetime
+    db_session: Session, device_id: str, datetime: datetime
 ) -> Union[StatisticsModel, NoResultFound]:
     """
     Get a device using the table's primary keys.
 
     Arguments:
+        db_session {Session} -- Database session.
         device_id {str} -- Jetson id which sent the information.
         datetime {datetime} -- Datetime when the device registered the information.
 
@@ -154,9 +198,7 @@ def get_statistic_by_id_and_datetime(
         datetime or an exception in case there's no matching statistic.
 
     """
-    statistic = database_session.query(StatisticsModel).get(
-        (device_id, datetime)
-    )
+    statistic = db_session.query(StatisticsModel).get((device_id, datetime))
 
     if not statistic:
         raise NoResultFound()

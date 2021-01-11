@@ -13,11 +13,11 @@ class StatisticsModel(Base):
         ForeignKey("device.id"),
         primary_key=True,
     )
-    datetime = Column(DateTime, primary_key=True)
+    datetime = Column(DateTime(timezone=True), primary_key=True)
     statistic_type = Column(Enum(StatisticTypeEnum, nullable=False))
-    people_with_mask = Column(Integer)
-    people_without_mask = Column(Integer)
-    people_total = Column(Integer)
+    people_with_mask = Column(Integer, nullable=False)
+    people_without_mask = Column(Integer, nullable=False)
+    people_total = Column(Integer, nullable=False)
 
 
 class DeviceModel(Base):

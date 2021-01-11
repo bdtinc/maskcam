@@ -1,7 +1,7 @@
 import json
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from broker import connect_mqtt_broker
 
@@ -34,7 +34,7 @@ def publish(client):
 
         alert_msg = {
             "device_id": device_id,
-            "timestamp": datetime.timestamp(datetime.now()),
+            "timestamp": datetime.timestamp(datetime.now(timezone.utc)),
             "people_with_mask": people_with_mask,
             "people_without_mask": people_without_mask,
             "people_total": people_with_mask + people_without_mask,
@@ -55,7 +55,7 @@ def publish(client):
 
         report_msg = {
             "device_id": device_id,
-            "timestamp": datetime.timestamp(datetime.now()),
+            "timestamp": datetime.timestamp(datetime.now(timezone.utc)),
             "people_with_mask": people_with_mask,
             "people_without_mask": people_without_mask,
             "people_total": people_with_mask + people_without_mask,

@@ -1,11 +1,9 @@
 FROM tiangolo/uvicorn-gunicorn-fastapi:python3.7
 
-RUN python -m pip install --upgrade pip
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN python -m pip install -r requirements.txt
+COPY ./app /app
+COPY requirements.txt /app/requirements.txt
 
 ENV PYTHONPATH=/app
-COPY ./app ./app/
+WORKDIR /app
+
+RUN python -m pip install --upgrade pip && pip install -r requirements.txt

@@ -31,7 +31,7 @@ services:
       - db
     ports:
       - 80:80
-    command: bash -c "sleep 3 && alembic upgrade head && /start-reload.sh"
+    command: bash -c "sleep 5 && /start-reload.sh"
     env_file:
       - backend.env
       - database.env

@@ -10,5 +10,6 @@ from .crud_statistic import (
     delete_statistic,
     get_statistic,
     get_statistics,
+    get_statistics_from_to,
     update_statistic,
 )
