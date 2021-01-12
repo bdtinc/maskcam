@@ -439,6 +439,98 @@ def set_nvtracker_configuration(tracker, config_file):
             tracker.set_property("enable_batch_process", tracker_enable_batch_process)
 
 
+def make_code_parser(codec):
+    if codec == CODEC_MP4:
+        codeparser = make_elm_or_print_err(
+            "mpeg4videoparse", "mpeg4-parser", "Code Parser"
+        )
+    elif codec == CODEC_H264:
+        codeparser = make_elm_or_print_err("h264parse", "h264-parser", "Code Parser")
+    else:  # Default: H265 (recommended)
+        codeparser = make_elm_or_print_err("h265parse", "h265-parser", "Code Parser")
+    return codeparser
+
+
+# class FileSaveBin(Gst.Bin):
+#     def __init__(self, name):
+#         super(FileSaveBin, self).__init__(name)
+
+
+def handle_message(bin, message):
+    print(f"Bin: {bin}")
+    print(f"Message: {message}")
+
+
+def cb_timeout_start_chunk(cb_args):
+    # Unpack callback args
+    (
+        splitter_file_udp,
+        pipeline,
+        codec,
+        output_chunk_basename,
+        output_chunk_number,
+        chunk_duration,
+        t_next_start,
+    ) = cb_args
+
+    # File saving
+    filesink_bin = Gst.Bin.new(f"filesink_{output_chunk_number}")
+    print(f"Type filesink_bin: {type(filesink_bin)}")
+    queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
+    codeparser = make_code_parser(codec)
+    container = make_elm_or_print_err("qtmux", "qtmux", "Container")
+    filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
+    output_chunk_filename = output_chunk_basename.format(output_chunk_number)
+    filesink.set_property("location", output_chunk_filename)
+    filesink.set_property("sync", 0)
+    filesink.set_property("async", 0)
+    print(f"Starting new video chunk: {output_chunk_filename}")
+
+    # Add elements to pipeline
+    pipeline_elements = (queue_file, codeparser, container, filesink)
+    for element in pipeline_elements:
+        filesink_bin.add(element)
+
+    # Add new branch
+    tee_file = splitter_file_udp.get_request_pad("src_%u")
+
+    # Pipeline links
+    tee_file.link(queue_file.get_static_pad("sink"))
+    queue_file.link(codeparser)
+    codeparser.link(container)
+    container.link(filesink)
+
+    pipeline.add(filesink_bin)
+    filesink_bin.set_state(Gst.State.PLAYING)
+    filesink_bin.set_property("message-forward", True)
+    filesink_bin.handle_message = handle_message
+
+    # Timeout to end this file
+    cb_args = (tee_file, pipeline_elements)
+    GLib.timeout_add_seconds(chunk_duration, cb_timeout_close_chunk, cb_args)
+
+    # Timeout to start new chunk
+    # chunk_number = output_chunk_number + 1
+    # cb_args = (splitter_file_udp, pipeline, chunk_number, chunk_duration, t_next_start)
+    # GLib.timeout_add_seconds(t_next_start, cb_timeout_start_chunk, cb_args)
+
+
+def cb_timeout_close_chunk(cb_args):
+    tee_file, pipeline_elements = cb_args
+
+    print("Blocking tee branch for this file chunk...")
+    tee_file.add_probe(
+        Gst.PadProbeType.BLOCK_DOWNSTREAM, cb_block_tee_branch, pipeline_elements
+    )
+
+
+def cb_block_tee_branch(pad, probe_info, cb_args):
+    print("Sending EOS to current file chunk...")
+    queue_file, codeparser, container, filesink = cb_args
+    container.send_event(Gst.Event.new_eos())
+    return Gst.PadProbeReturn.OK
+
+
 def main(args):
     global frame_number
     global total_frames
@@ -590,23 +682,18 @@ def main(args):
         encoder = make_elm_or_print_err(
             "avenc_mpeg4", "encoder", "Encoder", preload_reminder
         )
-        codeparser = make_elm_or_print_err(
-            "mpeg4videoparse", "mpeg4-parser", "Code Parser"
-        )
         rtppay = make_elm_or_print_err("rtpmp4vpay", "rtppay", "RTP MPEG-44 Payload")
     elif codec == CODEC_H264:
         print("Creating H264 stream")
         encoder = make_elm_or_print_err(
             "nvv4l2h264enc", "encoder", "Encoder", preload_reminder
         )
-        codeparser = make_elm_or_print_err("h264parse", "h264-parser", "Code Parser")
         rtppay = make_elm_or_print_err("rtph264pay", "rtppay", "RTP H264 Payload")
     else:  # Default: H265 (recommended)
         print("Creating H265 stream")
         encoder = make_elm_or_print_err(
             "nvv4l2h265enc", "encoder", "Encoder", preload_reminder
         )
-        codeparser = make_elm_or_print_err("h265parse", "h265-parser", "Code Parser")
         rtppay = make_elm_or_print_err("rtph265pay", "rtppay", "RTP H265 Payload")
 
     encoder.set_property("bitrate", output_bitrate)
@@ -624,17 +711,6 @@ def main(args):
         splitter_file_udp = make_elm_or_print_err(
             "tee", "tee_file_udp", "Splitter file/UDP"
         )
-
-        # File saving
-        queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
-        container = make_elm_or_print_err("qtmux", "qtmux", "Container")
-        filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
-        output_chunk_number = 1
-        output_chunk_filename = output_chunk_basename.format(output_chunk_number)
-        filesink.set_property("location", output_chunk_filename)
-        filesink.set_property("sync", 0)
-        filesink.set_property("async", 0)
-        print(f"Saving file {output_chunk_filename}")
 
         # UDP streaming
         queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
@@ -664,16 +740,11 @@ def main(args):
     pipeline.add(convert_post_osd)
     pipeline.add(capsfilter)
     pipeline.add(encoder)
-    pipeline.add(codeparser)
     if benchmark_mode:
         # Branch for benchmarking: sink nowhere
         pipeline.add(fakesink)
     else:
         pipeline.add(splitter_file_udp)
-        # Branch 1: file save
-        pipeline.add(queue_file)
-        pipeline.add(container)
-        pipeline.add(filesink)
         # Branch 2: streaming
         pipeline.add(queue_udp)
         pipeline.add(rtppay)
@@ -712,14 +783,7 @@ def main(args):
         encoder.link(splitter_file_udp)
 
         # Split stream to file and rtsp
-        tee_file = splitter_file_udp.get_request_pad("src_%u")
         tee_rtsp = splitter_file_udp.get_request_pad("src_%u")
-
-        # File save
-        tee_file.link(queue_file.get_static_pad("sink"))
-        queue_file.link(codeparser)
-        codeparser.link(container)
-        container.link(filesink)
 
         # RTSP streaming
         tee_rtsp.link(queue_udp.get_static_pad("sink"))
@@ -772,6 +836,25 @@ def main(args):
     time_start_playing = time.time()
     pipeline.set_state(Gst.State.PLAYING)
 
+    # Timeout to start new saved file
+    output_chunks_duration = 15
+    output_chunks_overlap = (
+        2  # Make sure greater than 0 (otherwise pipeline will raise EOS)
+    )
+    t_next_start = output_chunks_duration - output_chunks_overlap
+    chunk_number = 1
+    cb_args = (
+        splitter_file_udp,
+        pipeline,
+        codec,
+        output_chunk_basename,
+        chunk_number,
+        output_chunks_duration,
+        t_next_start,
+    )
+    # Start now a new file
+    GLib.timeout_add_seconds(0, cb_timeout_start_chunk, cb_args)
+
     while running:
 
         # Workaround to avoid GStreamer to stop on SIGINT, we want EOS signal to propagate
@@ -796,6 +879,8 @@ def main(args):
                 err, debug = message.parse_error()
                 sys.stderr.write("Error: %s: %s\n" % (err, debug))
                 running = False
+            elif t == Gst.MessageType.STATE_CHANGED:
+                print(f"STATE CHANGED: {message.src}")
         if sigint_received:
             print("Interruption signal received. Sending EOS.")
             sigint_received = False
@@ -804,7 +889,7 @@ def main(args):
             if benchmark_mode:
                 fakesink.send_event(Gst.Event.new_eos())
             else:
-                container.send_event(Gst.Event.new_eos())
+                # container.send_event(Gst.Event.new_eos())
                 udpsink.send_event(Gst.Event.new_eos())
 
     print("Finished processing")
