@@ -10,6 +10,6 @@ def convert_timestamp_to_datetime(timestamp: float):
 def get_enum_type(statistic_type: str):
     return (
         StatisticTypeEnum.ALERT
-        if statistic_type.lower() == "alert"
+        if statistic_type.lower() == "alerts"
         else StatisticTypeEnum.REPORT
     )
