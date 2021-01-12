@@ -439,98 +439,6 @@ def set_nvtracker_configuration(tracker, config_file):
             tracker.set_property("enable_batch_process", tracker_enable_batch_process)
 
 
-def make_code_parser(codec):
-    if codec == CODEC_MP4:
-        codeparser = make_elm_or_print_err(
-            "mpeg4videoparse", "mpeg4-parser", "Code Parser"
-        )
-    elif codec == CODEC_H264:
-        codeparser = make_elm_or_print_err("h264parse", "h264-parser", "Code Parser")
-    else:  # Default: H265 (recommended)
-        codeparser = make_elm_or_print_err("h265parse", "h265-parser", "Code Parser")
-    return codeparser
-
-
-# class FileSaveBin(Gst.Bin):
-#     def __init__(self, name):
-#         super(FileSaveBin, self).__init__(name)
-
-
-def handle_message(bin, message):
-    print(f"Bin: {bin}")
-    print(f"Message: {message}")
-
-
-def cb_timeout_start_chunk(cb_args):
-    # Unpack callback args
-    (
-        splitter_file_udp,
-        pipeline,
-        codec,
-        output_chunk_basename,
-        output_chunk_number,
-        chunk_duration,
-        t_next_start,
-    ) = cb_args
-
-    # File saving
-    filesink_bin = Gst.Bin.new(f"filesink_{output_chunk_number}")
-    print(f"Type filesink_bin: {type(filesink_bin)}")
-    queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
-    codeparser = make_code_parser(codec)
-    container = make_elm_or_print_err("qtmux", "qtmux", "Container")
-    filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
-    output_chunk_filename = output_chunk_basename.format(output_chunk_number)
-    filesink.set_property("location", output_chunk_filename)
-    filesink.set_property("sync", 0)
-    filesink.set_property("async", 0)
-    print(f"Starting new video chunk: {output_chunk_filename}")
-
-    # Add elements to pipeline
-    pipeline_elements = (queue_file, codeparser, container, filesink)
-    for element in pipeline_elements:
-        filesink_bin.add(element)
-
-    # Add new branch
-    tee_file = splitter_file_udp.get_request_pad("src_%u")
-
-    # Pipeline links
-    tee_file.link(queue_file.get_static_pad("sink"))
-    queue_file.link(codeparser)
-    codeparser.link(container)
-    container.link(filesink)
-
-    pipeline.add(filesink_bin)
-    filesink_bin.set_state(Gst.State.PLAYING)
-    filesink_bin.set_property("message-forward", True)
-    filesink_bin.handle_message = handle_message
-
-    # Timeout to end this file
-    cb_args = (tee_file, pipeline_elements)
-    GLib.timeout_add_seconds(chunk_duration, cb_timeout_close_chunk, cb_args)
-
-    # Timeout to start new chunk
-    # chunk_number = output_chunk_number + 1
-    # cb_args = (splitter_file_udp, pipeline, chunk_number, chunk_duration, t_next_start)
-    # GLib.timeout_add_seconds(t_next_start, cb_timeout_start_chunk, cb_args)
-
-
-def cb_timeout_close_chunk(cb_args):
-    tee_file, pipeline_elements = cb_args
-
-    print("Blocking tee branch for this file chunk...")
-    tee_file.add_probe(
-        Gst.PadProbeType.BLOCK_DOWNSTREAM, cb_block_tee_branch, pipeline_elements
-    )
-
-
-def cb_block_tee_branch(pad, probe_info, cb_args):
-    print("Sending EOS to current file chunk...")
-    queue_file, codeparser, container, filesink = cb_args
-    container.send_event(Gst.Event.new_eos())
-    return Gst.PadProbeReturn.OK
-
-
 def main(args):
     global frame_number
     global total_frames
@@ -538,26 +446,25 @@ def main(args):
     global end_time
     global sigint_received
 
+    config = configparser.ConfigParser()
+    config_file = "config_maskcam.txt"  # Also used in nvinfer element
+    config.read(config_file)
+    config.sections()
+    udp_port = int(config["maskcam"]["udp-port"])
+    codec = config["maskcam"]["codec"]
+    inference_interval = int(config["property"]["interval"])
+
     # Check input arguments
     camera_protocol = "camera://"  # Invented by us since there's no URI for this
     if len(args) != 2:
-        sys.stderr.write(
-            f"Usage: {args[0]} [file:// or {camera_protocol}]<video file or camera device path>\n"
-        )
-        sys.exit(1)
+        input_filename = config["maskcam"]["default-input"]
+        print(f"Using input from config file: {input_filename}")
+    else:
+        input_filename = args[1]
+        print(f"Provided input source: {input_filename}")
 
-    benchmark_mode = False
-    input_filename = args[1]
-    # output_maxframes_chunk = 30 * 20  # ~20 secs at 30fps
-    output_chunk_basename = input_filename.split("/")[-1].split(".")[0] + "_{}_out.mp4"
-    config_nvinfer = "config_y4tiny.txt"
     nvtracker_enabled = False  # Using Norfair
     config_nvtracker = "config_nvtracker.txt"
-    codec = CODEC_H265
-    udp_sink_port = 5400
-    # Streaming address: rtsp://<jetson-ip>:<rtsp-port>/<rtsp-address>
-    rtsp_streaming_port = 8554
-    rtsp_streaming_address = "/maskcam"
 
     # Input camera configuration
     # Use ./gst_capabilities.sh to get the list of available capabilities from /dev/video0
@@ -571,7 +478,6 @@ def main(args):
     output_width = 1920
     output_height = 1080
     output_bitrate = 4000000  # Nice for h264@1024x576: 4000000
-    streaming_clock_rate = 90000
 
     print(f"Playing file {input_filename}")
     print(f"Output codec: {codec}")
@@ -641,7 +547,7 @@ def main(args):
 
     # Inference element: object detection using TRT engine
     pgie = make_elm_or_print_err("nvinfer", "primary-inference", "pgie")
-    pgie.set_property("config-file-path", config_nvinfer)
+    pgie.set_property("config-file-path", config_file)
 
     # Tracker by nvidia (not used, kept just in case)
     if nvtracker_enabled:
@@ -703,22 +609,13 @@ def main(args):
     encoder.set_property("insert-sps-pps", 1)
     encoder.set_property("bufapi-version", 1)
 
-    if benchmark_mode:
-        # Fakesink for benchmarking (don't save video or stream)
-        fakesink = make_elm_or_print_err("fakesink", "fakesink", "Black Hole")
-    else:
-        # Split stream into file save and streaming: tee + queues
-        splitter_file_udp = make_elm_or_print_err(
-            "tee", "tee_file_udp", "Splitter file/UDP"
-        )
-
-        # UDP streaming
-        queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
-        udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
-        udpsink.set_property("host", "224.224.255.255")
-        udpsink.set_property("port", udp_sink_port)
-        udpsink.set_property("async", False)
-        udpsink.set_property("sync", 1)
+    # UDP streaming
+    queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
+    udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
+    udpsink.set_property("host", "224.224.255.255")
+    udpsink.set_property("port", udp_port)
+    udpsink.set_property("async", False)
+    udpsink.set_property("sync", 1)
 
     # Add elements to the pipeline
     if camera_input:
@@ -740,15 +637,11 @@ def main(args):
     pipeline.add(convert_post_osd)
     pipeline.add(capsfilter)
     pipeline.add(encoder)
-    if benchmark_mode:
-        # Branch for benchmarking: sink nowhere
-        pipeline.add(fakesink)
-    else:
-        pipeline.add(splitter_file_udp)
-        # Branch 2: streaming
-        pipeline.add(queue_udp)
-        pipeline.add(rtppay)
-        pipeline.add(udpsink)
+
+    # Output to UDP
+    pipeline.add(queue_udp)
+    pipeline.add(rtppay)
+    pipeline.add(udpsink)
 
     print("Linking elements in the Pipeline \n")
 
@@ -776,37 +669,11 @@ def main(args):
     queue.link(convert_post_osd)
     convert_post_osd.link(capsfilter)
     capsfilter.link(encoder)
-    if benchmark_mode:
-        print("\n\n ------ Running in Benchmark Mode (no file/udp sinks) ------- \n\n")
-        encoder.link(fakesink)
-    else:
-        encoder.link(splitter_file_udp)
+    encoder.link(queue_udp)
 
-        # Split stream to file and rtsp
-        tee_rtsp = splitter_file_udp.get_request_pad("src_%u")
-
-        # RTSP streaming
-        tee_rtsp.link(queue_udp.get_static_pad("sink"))
-        queue_udp.link(rtppay)
-        rtppay.link(udpsink)
-
-        # Start streaming
-        server = GstRtspServer.RTSPServer.new()
-        server.props.service = str(rtsp_streaming_port)
-        server.attach(None)
-
-        factory = GstRtspServer.RTSPMediaFactory.new()
-        factory.set_launch(
-            f"( udpsrc name=pay0 port={udp_sink_port} buffer-size=524288"
-            f' caps="application/x-rtp, media=video, clock-rate={streaming_clock_rate},'
-            f' encoding-name=(string){codec}, payload=96 " )'
-        )
-        factory.set_shared(True)
-        server.get_mount_points().add_factory(rtsp_streaming_address, factory)
-
-        print(
-            f"\n\nStreaming at rtsp://<jetson-ip>:{rtsp_streaming_port}{rtsp_streaming_address}\n\n"
-        )
+    # Output to UDP
+    queue_udp.link(rtppay)
+    rtppay.link(udpsink)
 
     # Lets add probe to get informed of the meta data generated, we add probe to
     # the sink pad of the osd element, since by that time, the buffer would have
@@ -819,92 +686,23 @@ def main(args):
 
     # GLib loop required for RTSP server
     g_loop = GLib.MainLoop()
-    g_context = g_loop.get_context()
-
-    # Custom SIGINT handler (send EOS to save file correctly)
-    signal.signal(signal.SIGINT, handle_interrupt)
-
-    # GStreamer message bus
-    bus = pipeline.get_bus()
-
-    # Custom event loop, allows saving file on Ctrl+C press
-    running = True
 
     # start play back and listen to events
-    print("Starting pipeline")
-    print("Press Ctrl+C to stop processing video file or camera and write results")
-    time_start_playing = time.time()
+    print("Starting pipeline. Press Ctrl+C to stop processing")
     pipeline.set_state(Gst.State.PLAYING)
+    time_start_playing = time.time()
 
-    # Timeout to start new saved file
-    output_chunks_duration = 15
-    output_chunks_overlap = (
-        2  # Make sure greater than 0 (otherwise pipeline will raise EOS)
-    )
-    t_next_start = output_chunks_duration - output_chunks_overlap
-    chunk_number = 1
-    cb_args = (
-        splitter_file_udp,
-        pipeline,
-        codec,
-        output_chunk_basename,
-        chunk_number,
-        output_chunks_duration,
-        t_next_start,
-    )
-    # Start now a new file
-    GLib.timeout_add_seconds(0, cb_timeout_start_chunk, cb_args)
+    try:
+        g_loop.run()
+    except KeyboardInterrupt:
+        print("Keyboard interruption received")
 
-    while running:
-
-        # Workaround to avoid GStreamer to stop on SIGINT, we want EOS signal to propagate
-        if pipeline.current_state is not Gst.State.PLAYING:
-            pipeline.set_state(Gst.State.PLAYING)
-
-        g_context.iteration(may_block=False)
-        message = bus.pop()
-        if message is not None:
-            t = message.type
-
-            if t == Gst.MessageType.EOS:
-                end_time = time.time()
-                # print(f"Received EOS from: {message.src}")
-                print(f"Written file: {output_chunk_filename}")
-                sys.stdout.write("End-of-stream\n")
-                running = False
-            elif t == Gst.MessageType.WARNING:
-                err, debug = message.parse_warning()
-                sys.stderr.write("Warning: %s: %s\n" % (err, debug))
-            elif t == Gst.MessageType.ERROR:
-                err, debug = message.parse_error()
-                sys.stderr.write("Error: %s: %s\n" % (err, debug))
-                running = False
-            elif t == Gst.MessageType.STATE_CHANGED:
-                print(f"STATE CHANGED: {message.src}")
-        if sigint_received:
-            print("Interruption signal received. Sending EOS.")
-            sigint_received = False
-
-            # Pipeline will pop EOS when all sinks send EOS
-            if benchmark_mode:
-                fakesink.send_event(Gst.Event.new_eos())
-            else:
-                # container.send_event(Gst.Event.new_eos())
-                udpsink.send_event(Gst.Event.new_eos())
-
+    end_time = time.time()
     print("Finished processing")
-    # cleanup
     pipeline.set_state(Gst.State.NULL)
 
     # Profiling display
     if start_time is not None and end_time is not None:
-
-        # Read inference interval
-        config = configparser.ConfigParser()
-        config.read(config_nvinfer)
-        config.sections()
-        inference_interval = int(config["property"]["interval"])
-
         total_time = end_time - start_time
         total_frames = (
             total_frames - 1

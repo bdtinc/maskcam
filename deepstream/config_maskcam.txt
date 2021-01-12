@@ -57,6 +57,17 @@
 # The values in the config file are overridden by values set through GObject
 # properties.
 
+[maskcam]
+default-input=camera:///dev/video0
+output-dir=/dev/shm
+output-chunks-duration=25
+udp-port=5400
+streaming-port=8554
+streaming-clock-rate=90000
+# Supported: MP4, H264, H265
+codec=H265
+
+
 [property]
 gpu-id=0
 # Was: 
