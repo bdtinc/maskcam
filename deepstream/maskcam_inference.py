@@ -68,6 +68,7 @@ class FaceMask:
         self.color_unknown = (1.0, 1.0, 0.0)  # yellow
         self.draw_raw_detections = False
         self.draw_tracked_people = True
+        self.tracker_enabled = True
 
     def validate_detection(self, box_points, score, label):
         box_width = box_points[1][0] - box_points[0][0]
@@ -129,11 +130,6 @@ tracker = Tracker(
     hit_inertia_min=25,
     hit_inertia_max=60,
 )
-
-
-def handle_interrupt(sig, frame):
-    global sigint_received
-    sigint_received = True
 
 
 def is_aarch64():
@@ -254,13 +250,16 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             pyds.nvds_remove_obj_meta_from_frame(frame_meta, obj_meta)
         obj_meta_list = None
 
-        tracked_people = tracker.update(detections)
-
-        # Filter out people with no live points (don't draw)
-        drawn_people = [person for person in tracked_people if person.live_points.any()]
-
         # Each meta object carries max 16 rects/labels/etc.
         max_drawings_per_meta = 16  # This is hardcoded, not documented
+
+        if face_mask.tracker_enabled:
+            # Track, count and draw tracked people
+            tracked_people = tracker.update(detections)
+            # Filter out people with no live points (don't draw)
+            drawn_people = [
+                person for person in tracked_people if person.live_points.any()
+            ]
 
         if face_mask.draw_tracked_people:
             for n_person, person in enumerate(drawn_people):
@@ -605,8 +604,8 @@ def main(args):
     encoder.set_property("bitrate", output_bitrate)
     # Taken from test1_rtsp_out python sample app
     # Works without this, and it's not documented, keep an eye on this
-    encoder.set_property("preset-level", 1)
     encoder.set_property("insert-sps-pps", 1)
+    encoder.set_property("preset-level", 1)
     encoder.set_property("bufapi-version", 1)
 
     # UDP streaming

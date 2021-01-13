@@ -65,7 +65,8 @@ udp-port=5400
 streaming-port=8554
 streaming-clock-rate=90000
 # Supported: MP4, H264, H265
-codec=H265
+# Recommended H264 for stability on video save
+codec=H264
 
 
 [property]
