@@ -36,6 +36,21 @@ services:
       - backend.env
       - database.env
 
+  streamlit:
+    build: frontend
+    command: "streamlit run main.py"
+    ports:
+      - "8501:8501"
+    volumes:
+      - "./frontend:/usr/src/app"
+    env_file:
+      - frontend.env
+    depends_on:
+      - db
+      - backend
+    links:
+      - backend
+
 volumes:
   pgdata:
   mosquitto-data:
