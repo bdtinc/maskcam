@@ -74,7 +74,7 @@ def main(args):
     codec = config["maskcam"]["codec"]
     streaming_clock_rate = int(config["maskcam"]["streaming-clock-rate"])
 
-    udp_capabilities = f"application/x-rtp,media=video,encoding-name=(string){codec},payload=96,clock-rate={streaming_clock_rate}"
+    udp_capabilities = f"application/x-rtp,media=video,encoding-name=(string){codec}"
     output_file = f"{output_dir}/test_{datetime.today().strftime('%Y%m%d_%H%M%S')}.mp4"
 
     print(f"Codec: {codec}")
@@ -93,8 +93,11 @@ def main(args):
 
     udpsrc = make_elm_or_print_err("udpsrc", "udpsrc", "UDP Source")
     udpsrc.set_property("port", udp_port)
-    udpsrc.set_property("buffer-size", 524288)
+    # udpsrc.set_property("buffer-size", 524288)
     udpsrc.set_property("caps", Gst.Caps.from_string(udp_capabilities))
+    rtpjitterbuffer = make_elm_or_print_err(
+        "rtpjitterbuffer", "rtpjitterbuffer", "RTP Jitter Buffer"
+    )
 
     # caps_udp = make_elm_or_print_err("capsfilter", "caps_udp", "UDP RTP capabilities")
     # caps_udp.set_property("caps", Gst.Caps.from_string(udp_capabilities))
@@ -123,11 +126,12 @@ def main(args):
     container = make_elm_or_print_err("qtmux", "qtmux", "Container")
     filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
     filesink.set_property("location", output_file)
-    filesink.set_property("sync", True)
-    filesink.set_property("async", 0)
+    # filesink.set_property("sync", False)
+    # filesink.set_property("async", False)
     print(f"Starting new video file: {output_file}")
 
     pipeline.add(udpsrc)
+    pipeline.add(rtpjitterbuffer)
     # pipeline.add(caps_udp)
     pipeline.add(rtpdepay)
     pipeline.add(codeparser)
@@ -137,7 +141,8 @@ def main(args):
     print("Linking elements in the Pipeline \n")
 
     # Pipeline Links
-    udpsrc.link(rtpdepay)
+    udpsrc.link(rtpjitterbuffer)
+    rtpjitterbuffer.link(rtpdepay)
     # caps_udp.link(rtpdepay)
     rtpdepay.link(codeparser)
     codeparser.link(container)

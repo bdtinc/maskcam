@@ -614,8 +614,8 @@ def main(args):
     udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
     udpsink.set_property("host", "224.224.255.255")
     udpsink.set_property("port", udp_port)
-    udpsink.set_property("async", False)
-    udpsink.set_property("sync", 1)
+    # udpsink.set_property("async", False)
+    # udpsink.set_property("sync", False)
 
     # Add elements to the pipeline
     if camera_input:
