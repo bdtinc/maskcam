@@ -10,7 +10,11 @@ SERVER_URL = os.environ["SERVER_URL"]
 def get_devices():
     response = requests.get(f"http://{SERVER_URL}/devices")
 
-    return json.loads(response.content) if response.ok else []
+    devices_json = json.loads(response.content) if response.ok else []
+
+    devices = [None]
+    devices.extend([device["id"] for device in devices_json])
+    return devices
 
 
 def get_device(device_id: str):

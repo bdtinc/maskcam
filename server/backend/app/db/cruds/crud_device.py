@@ -23,6 +23,7 @@ def create_device(
 
     """
     try:
+        device_information["id"] = device_information["id"].replace(" ", "_")
         device = DeviceModel(**device_information)
         db_session.add(device)
         db_session.commit()

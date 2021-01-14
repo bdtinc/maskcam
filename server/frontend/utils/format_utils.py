@@ -86,40 +86,25 @@ def add_information(statistic_dict: Dict, stat_information: Dict):
     return statistic_dict
 
 
-def create_chart(chart_information: Dict):
+def create_chart(reports=None, alerts=None):
     # Create figure with secondary y-axis
     figure = make_subplots(specs=[[{"secondary_y": True}]])
 
-    # Add traces
-    figure.add_trace(
-        go.Bar(
-            x=chart_information["dates"],
-            y=chart_information["people_total"],
-            name="People",
-            marker_color="darkslategray",
-        ),
-        secondary_y=False,
-    )
+    if reports:
+        report_colors = {
+            "people_total": "darkslategray",
+            "people_with_mask": "cadetblue",
+            "mask_percentage": "limegreen",
+        }
+        figure = add_trace(reports, figure, report_colors, trace_type="report")
 
-    figure.add_trace(
-        go.Bar(
-            x=chart_information["dates"],
-            y=chart_information["people_with_mask"],
-            name="Masks",
-            marker_color="cadetblue",
-        ),
-        secondary_y=False,
-    )
-
-    figure.add_trace(
-        go.Scatter(
-            x=chart_information["dates"],
-            y=chart_information["mask_percentage"],
-            name="Mask %",
-            marker_color="limegreen",
-        ),
-        secondary_y=True,
-    )
+    if alerts:
+        alert_colors = {
+            "people_total": "salmon",
+            "people_with_mask": "coral",
+            "mask_percentage": "orange",
+        }
+        figure = add_trace(alerts, figure, alert_colors, trace_type="alert")
 
     # Set x-axis title
     figure.update_xaxes(title_text="Datetime")
@@ -145,6 +130,40 @@ def create_chart(chart_information: Dict):
         font=dict(
             size=10,
         ),
+    )
+
+    return figure
+
+
+def add_trace(trace_information, figure, colors, trace_type=""):
+    figure.add_trace(
+        go.Bar(
+            x=trace_information["dates"],
+            y=trace_information["people_total"],
+            name="People" if not trace_type else f"People {trace_type}",
+            marker_color=colors["people_total"],
+        ),
+        secondary_y=False,
+    )
+
+    figure.add_trace(
+        go.Bar(
+            x=trace_information["dates"],
+            y=trace_information["people_with_mask"],
+            name="Masks" if not trace_type else f"Masks {trace_type}",
+            marker_color=colors["people_with_mask"],
+        ),
+        secondary_y=False,
+    )
+
+    figure.add_trace(
+        go.Scatter(
+            x=trace_information["dates"],
+            y=trace_information["mask_percentage"],
+            name="Mask %" if not trace_type else f"Mask % {trace_type}",
+            marker_color=colors["mask_percentage"],
+        ),
+        secondary_y=True,
     )
 
     return figure
