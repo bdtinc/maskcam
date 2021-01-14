@@ -22,6 +22,7 @@
 # DEALINGS IN THE SOFTWARE.
 ################################################################################
 
+import os
 import gi
 import pyds
 import sys
@@ -31,6 +32,10 @@ import signal
 import platform
 import configparser
 import numpy as np
+import json
+from datetime import datetime, timezone
+from paho.mqtt import client as paho_mqtt_client
+
 
 gi.require_version("Gst", "1.0")
 gi.require_version("GstRtspServer", "1.0")
@@ -39,6 +44,7 @@ from gi.repository import GLib, Gst, GstRtspServer
 sys.path.append("../../norfair")
 sys.path.append("../../filterpy")
 from norfair.tracker import Tracker, Detection
+
 
 # See ../yolo/data/obj.names
 PGIE_CLASS_ID_MASK = 0
@@ -50,6 +56,7 @@ start_time = None
 end_time = None
 total_frames = 0
 sigint_received = False
+mqtt_client = None
 
 CODEC_MP4 = "MP4"
 CODEC_H265 = "H265"
@@ -97,6 +104,18 @@ class FaceMask:
             label = "not visible"
         return f"{person_id}|{label}({abs(person_votes)})", color
 
+    def get_statistics(self):
+        total_people = len(self.people_votes)
+        total_classified = 0
+        total_mask = 0
+        for person_id in self.people_votes:
+            person_votes = self.people_votes[person_id]
+            if abs(person_votes) >= self.min_votes:
+                total_classified += 1
+                if person_votes > 0:
+                    total_mask += 1
+        return total_people, total_classified, total_mask
+
 
 def keypoints_distance(detected_pose, tracked_pose):
     detected_points = detected_pose.points
@@ -130,6 +149,49 @@ tracker = Tracker(
     hit_inertia_min=25,
     hit_inertia_max=60,
 )
+
+
+def connect_mqtt_broker(
+    client_id: str, broker_ip: str, broker_port: int
+) -> paho_mqtt_client:
+    def on_connect(client, userdata, flags, code):
+        if code == 0:
+            print("Connected to MQTT Broker")
+        else:
+            print(f"Failed to connect, return code {code}\n")
+
+    client = paho_mqtt_client.Client(client_id)
+    client.on_connect = on_connect
+    client.connect(broker_ip, broker_port)
+    return client
+
+
+def cb_send_mqtt(cb_args):
+    mqtt_client, mqtt_device_name, mqtt_send_period = cb_args
+    # Test topic
+    test_topic = "test"
+    people_total, people_classified, people_mask = face_mask.get_statistics()
+    people_no_mask = people_classified - people_mask
+    test_result = mqtt_client.publish(
+        test_topic,
+        json.dumps(
+            {
+                "device_id": mqtt_device_name,
+                "people_total": people_total,
+                "people_with_mask": people_mask,
+                "people_without_mask": people_no_mask,
+                "timestamp": datetime.timestamp(datetime.now(timezone.utc)),
+            }
+        ),
+    )
+
+    if test_result[0] == 0:
+        print(f"Send test msg to test topic")
+    else:
+        print(f"Failed to send message to test topic")
+
+    # Next report timeout
+    GLib.timeout_add_seconds(mqtt_send_period, cb_send_mqtt, cb_args)
 
 
 def is_aarch64():
@@ -444,6 +506,11 @@ def main(args):
     global start_time
     global end_time
     global sigint_received
+    global mqtt_client
+
+    # Must come defined as environment var or MQTT gets disabled
+    mqtt_broker_ip = os.environ.get("MQTT_BROKER_IP", None)
+    mqtt_device_name = os.environ.get("MQTT_DEVICE_NAME", None)
 
     config = configparser.ConfigParser()
     config_file = "config_maskcam.txt"  # Also used in nvinfer element
@@ -451,6 +518,8 @@ def main(args):
     config.sections()
     udp_port = int(config["maskcam"]["udp-port"])
     codec = config["maskcam"]["codec"]
+    mqtt_broker_port = int(config["maskcam"]["mqtt-broker-port"])
+    mqtt_send_period = int(config["maskcam"]["mqtt-send-period"])
     inference_interval = int(config["property"]["interval"])
 
     # Check input arguments
@@ -480,6 +549,20 @@ def main(args):
 
     print(f"Playing file {input_filename}")
     print(f"Output codec: {codec}")
+
+    if mqtt_broker_ip is None or mqtt_device_name is None:
+        print(
+            "\nMQTT is DISABLED since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
+        )
+    else:
+        print(f"\nConnecting to MQTT server IP: {mqtt_broker_ip}")
+        print(f"Device name: {mqtt_device_name}\n\n")
+        mqtt_client = connect_mqtt_broker(
+            client_id=mqtt_device_name,
+            broker_ip=mqtt_broker_ip,
+            broker_port=mqtt_broker_port,
+        )
+        mqtt_client.loop_start()
 
     # Standard GStreamer initialization
     # GObject.threads_init()  # Doesn't seem necessary (see https://pygobject.readthedocs.io/en/latest/guide/threading.html)
@@ -690,6 +773,10 @@ def main(args):
     print("Starting pipeline. Press Ctrl+C to stop processing")
     pipeline.set_state(Gst.State.PLAYING)
     time_start_playing = time.time()
+
+    if mqtt_client is not None:
+        cb_args = (mqtt_client, mqtt_device_name, mqtt_send_period)
+        GLib.timeout_add_seconds(mqtt_send_period, cb_send_mqtt, cb_args)
 
     try:
         g_loop.run()

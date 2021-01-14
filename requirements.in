@@ -13,6 +13,9 @@ numpy
 scipy
 PyYAML
 
+# MQTT
+paho-mqtt
+
 # Pytorch
 # torch
 # torchvision
