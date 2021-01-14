@@ -30,6 +30,7 @@ import ipdb
 import time
 import signal
 import platform
+import threading
 import configparser
 import numpy as np
 import json
@@ -78,16 +79,19 @@ mqtt_client = None
 class FaceMask:
     def __init__(self, th_detection, th_vote, min_face_size):
         self.people_votes = {}
+        self.current_people = set()
         self.th_detection = th_detection
         self.th_vote = th_vote
         self.min_face_size = min_face_size
-        self.min_votes = 10
+        self.min_votes = 5
+        self.max_votes = 50
         self.color_mask = (0.0, 1.0, 0.0)  # green
         self.color_no_mask = (1.0, 0.0, 0.0)  # red
         self.color_unknown = (1.0, 1.0, 0.0)  # yellow
         self.draw_raw_detections = False
         self.draw_tracked_people = True
         self.tracker_enabled = True
+        self.stats_lock = threading.Lock()
 
     def validate_detection(self, box_points, score, label):
         box_width = box_points[1][0] - box_points[0][0]
@@ -98,13 +102,19 @@ class FaceMask:
         )
 
     def add_detection(self, person_id, label, score):
-        if person_id not in self.people_votes:
-            self.people_votes[person_id] = 0
-        if score > self.th_vote:
-            if label == "mask":
-                self.people_votes[person_id] += 1
-            elif label == "no_mask" or "misplaced":
-                self.people_votes[person_id] -= 1
+        # This function is called from streaming thread
+        with self.stats_lock:
+            self.current_people.add(person_id)
+            if person_id not in self.people_votes:
+                self.people_votes[person_id] = 0
+            if score > self.th_vote:
+                if label == "mask":
+                    self.people_votes[person_id] += 1
+                elif label == "no_mask" or "misplaced":
+                    self.people_votes[person_id] -= 1
+                self.people_votes[person_id] = np.clip(
+                    self.people_votes[person_id], -self.max_votes, self.max_votes
+                )
 
     def get_person_label(self, person_id):
         person_votes = self.people_votes[person_id]
@@ -116,16 +126,35 @@ class FaceMask:
             label = "not visible"
         return f"{person_id}|{label}({abs(person_votes)})", color
 
-    def get_statistics(self):
-        total_people = len(self.people_votes)
-        total_classified = 0
-        total_mask = 0
-        for person_id in self.people_votes:
-            person_votes = self.people_votes[person_id]
-            if abs(person_votes) >= self.min_votes:
-                total_classified += 1
-                if person_votes > 0:
-                    total_mask += 1
+    def get_instant_statistics(self, refresh=True):
+        """
+        Get statistics only including people that appeared on camera since last refresh
+        """
+        instant_stats = self.get_statistics(filter_ids=self.current_people)
+        if refresh:
+            with self.stats_lock:
+                self.current_people = set()
+        return instant_stats
+
+    def get_statistics(self, filter_ids=None):
+        with self.stats_lock:
+            if filter_ids is not None:
+                filtered_people = {
+                    id: votes
+                    for id, votes in self.people_votes.items()
+                    if id in filter_ids
+                }
+            else:
+                filtered_people = self.people_votes
+            total_people = len(filtered_people)
+            total_classified = 0
+            total_mask = 0
+            for person_id in filtered_people:
+                person_votes = filtered_people[person_id]
+                if abs(person_votes) >= self.min_votes:
+                    total_classified += 1
+                    if person_votes > 0:
+                        total_mask += 1
         return total_people, total_classified, total_mask
 
 
@@ -150,7 +179,7 @@ def keypoints_distance(detected_pose, tracked_pose):
     return mean_distance_normalized
 
 
-face_mask = FaceMask(0.3, 0.9, 32)
+face_mask = FaceMask(0.3, 0.4, 32)
 
 # In Norfair we trust
 tracker = Tracker(
@@ -183,7 +212,7 @@ def send_mqtt_msg(topic, message):
     # TODO: Handle queuing if mqtt_client not connected
     result = mqtt_client.publish(topic, json.dumps(message))
     if result[0] == 0:
-        print(f"[{topic}] MQTT message sent")
+        print(f"[{topic}] MQTT message sent: {message}")
     else:
         print(f"[{topic}] MQTT message FAILED")
 
@@ -198,7 +227,9 @@ def cb_send_statistics(cb_args):
     mqtt_send_period = cb_args
     # Test topic
     topic = TOPIC_STATS  # TODO: implement TOPIC_ALERTS
-    people_total, people_classified, people_mask = face_mask.get_statistics()
+    people_total, people_classified, people_mask = face_mask.get_instant_statistics(
+        refresh=True
+    )
     people_no_mask = people_classified - people_mask
     message = {
         "device_id": MQTT_DEVICE_NAME,
@@ -528,9 +559,9 @@ def main(args):
     )
 
     # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
-    output_width = 1920
-    output_height = 1080
-    output_bitrate = 4000000  # Nice for h264@1024x576: 4000000
+    output_width = 1024
+    output_height = 608
+    output_bitrate = 2000000  # Nice for h264@1024x576: 4000000
 
     print(f"Playing file {input_filename}")
     print(f"Output codec: {codec}")
