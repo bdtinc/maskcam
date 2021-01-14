@@ -1,6 +1,7 @@
 from typing import Dict, List
 
 import pandas as pd
+import numpy as np
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -62,13 +63,26 @@ def group_data(data: Dict, group_data_by: str):
 
     group = (
         data_df.resample(criterion, on="dates")
-        .agg({"people_total": "sum", "people_with_mask": "sum"})
+        .agg(
+            {
+                "people_total": "sum",
+                "people_with_mask": "sum",
+                "people_without_mask": "sum",
+            }
+        )
         .reset_index()
     )
 
     # Calculate new mask percentage
     group["mask_percentage"] = (
         group["people_with_mask"] * 100 / group["people_total"]
+    )
+    group["mask_percentage"] = group["mask_percentage"].replace(
+        [np.inf, -np.inf], 0
+    )
+
+    group["visible_people"] = (
+        group["people_with_mask"] + group["people_without_mask"]
     )
 
     # Drop empty lines
@@ -79,6 +93,7 @@ def group_data(data: Dict, group_data_by: str):
         "people_with_mask": list(group["people_with_mask"].values()),
         "people_total": list(group["people_total"].values()),
         "mask_percentage": list(group["mask_percentage"].values()),
+        "visible_people": list(group["visible_people"].values()),
     }
 
     return grouped_data
@@ -93,6 +108,8 @@ def create_statistics_dict():
         "mask_percentage": [],
         "people_total": [],
         "people_with_mask": [],
+        "people_without_mask": [],
+        "visible_people": [],
     }
 
 
@@ -105,18 +122,25 @@ def add_information(statistic_dict: Dict, statistic_information: Dict):
         statistic_information {Dict} -- Data to add.
     """
     statistic_dict["dates"].append(statistic_information["datetime"])
-    statistic_dict["people_with_mask"].append(
-        statistic_information["people_with_mask"]
-    )
 
     total = statistic_information["people_total"]
+    people_with_mask = statistic_information["people_with_mask"]
+    people_without_mask = statistic_information["people_without_mask"]
+
     statistic_dict["people_total"].append(total)
-    percentage = (
+    statistic_dict["people_with_mask"].append(people_with_mask)
+    statistic_dict["people_without_mask"].append(people_without_mask)
+
+    mask_percentage = (
         statistic_information["people_with_mask"] * 100 / total
         if total != 0
         else 0
     )
-    statistic_dict["mask_percentage"].append(percentage)
+    statistic_dict["mask_percentage"].append(mask_percentage)
+
+    statistic_dict["visible_people"].append(
+        people_with_mask + people_without_mask
+    )
 
     return statistic_dict
 
@@ -138,14 +162,16 @@ def create_chart(reports: Dict = {}, alerts: Dict = {}):
             "people_total": "darkslategray",
             "people_with_mask": "cadetblue",
             "mask_percentage": "limegreen",
+            "visible_people": "royalblue",
         }
         figure = add_trace(reports, figure, report_colors, trace_type="report")
 
     if alerts:
         alert_colors = {
-            "people_total": "red",
+            "people_total": "darkred",
             "people_with_mask": "salmon",
             "mask_percentage": "orange",
+            "visible_people": "indianred",
         }
         figure = add_trace(alerts, figure, alert_colors, trace_type="alert")
 
@@ -204,6 +230,16 @@ def add_trace(trace_information: Dict, figure, colors: Dict, trace_type=""):
             y=trace_information["people_with_mask"],
             name="Masks" if not trace_type else f"Masks {trace_type}",
             marker_color=colors["people_with_mask"],
+        ),
+        secondary_y=False,
+    )
+
+    figure.add_trace(
+        go.Bar(
+            x=trace_information["dates"],
+            y=trace_information["visible_people"],
+            name="Visible" if not trace_type else f"Visible {trace_type}",
+            marker_color=colors["visible_people"],
         ),
         secondary_y=False,
     )
