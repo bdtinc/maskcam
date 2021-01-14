@@ -9,6 +9,9 @@ from utils.format_utils import create_chart, format_data
 
 
 def display_sidebar(all_devices, state):
+    """
+    Display sidebar information.
+    """
     st.sidebar.subheader("Device selection")
     state.selected_device = st.sidebar.selectbox(
         "Selected device",
@@ -23,10 +26,10 @@ def display_sidebar(all_devices, state):
         "From date - To date",
         (
             state.date_filter[0]
-            if state.date_filter
+            if state.date_filter and len(state.date_filter) == 2
             else datetime.now(timezone.utc),
             state.date_filter[1]
-            if state.date_filter
+            if state.date_filter and len(state.date_filter) == 2
             else datetime.now(timezone.utc),
         ),
     )
@@ -50,6 +53,9 @@ def display_sidebar(all_devices, state):
 
 
 def display_device(state):
+    """
+    Display specific device information.
+    """
     selected_device = state.selected_device
     device = get_device(selected_device)
 
@@ -117,6 +123,9 @@ def main():
         st.write("Please select a device.")
     else:
         display_device(state)
+        if st.button("Refresh"):
+            # Force frontend to refresh
+            pass
 
     state.sync()
 

@@ -6,10 +6,18 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
-def format_data(statistics: List = [], group_data_by=None):
+def format_data(statistics: List = [], group_data_by: str = None):
+    """
+    Format data to be displayed in the carts.
+
+    Arguments:
+        statistics {List} -- All device statistics.
+        group_data_by {str} -- User selected aggregation option.
+    """
     reports, alerts = {}, {}
 
     for statistic in statistics:
+        # Separate reports from alerts
         if statistic["statistic_type"] == "REPORT":
             if not reports:
                 reports = create_statistics_dict()
@@ -21,13 +29,20 @@ def format_data(statistics: List = [], group_data_by=None):
 
             alerts = add_information(alerts, statistic)
 
+    # Aggregate data
     reports = group_data(reports, group_data_by)
     alerts = group_data(alerts, group_data_by)
-
     return reports, alerts
 
 
-def group_data(data: Dict, group_data_by):
+def group_data(data: Dict, group_data_by: str):
+    """
+    Aggregate data using different criteria.
+
+    Arguments:
+        data {Dict} -- Data to aggregate.
+        group_data_by {str} -- User selected aggregation option.
+    """
     data_df = pd.DataFrame.from_dict(data)
     data_df["dates"] = pd.to_datetime(data_df["dates"])
 
@@ -46,12 +61,15 @@ def group_data(data: Dict, group_data_by):
         .agg({"people_total": "sum", "people_with_mask": "sum"})
         .reset_index()
     )
+
+    # Calculate new mask percentage
     group["mask_percentage"] = (
         group["people_with_mask"] * 100 / group["people_total"]
     )
+
+    # Drop empty lines
     group.dropna(subset=["mask_percentage"], inplace=True)
     group = group.to_dict()
-
     grouped_data = {
         "dates": [t.to_pydatetime() for t in group["dates"].values()],
         "people_with_mask": list(group["people_with_mask"].values()),
@@ -63,6 +81,9 @@ def group_data(data: Dict, group_data_by):
 
 
 def create_statistics_dict():
+    """
+    Chart data structure.
+    """
     return {
         "dates": [],
         "mask_percentage": [],
@@ -71,22 +92,40 @@ def create_statistics_dict():
     }
 
 
-def add_information(statistic_dict: Dict, stat_information: Dict):
-    statistic_dict["dates"].append(stat_information["datetime"])
+def add_information(statistic_dict: Dict, statistic_information: Dict):
+    """
+    Add information to existing dict.
+
+    Arguments:
+        statistic_dict {Dict} -- Existing dict.
+        statistic_information {Dict} -- Data to add.
+    """
+    statistic_dict["dates"].append(statistic_information["datetime"])
     statistic_dict["people_with_mask"].append(
-        stat_information["people_with_mask"]
+        statistic_information["people_with_mask"]
     )
 
-    total = stat_information["people_total"]
+    total = statistic_information["people_total"]
     statistic_dict["people_total"].append(total)
-    statistic_dict["mask_percentage"].append(
-        stat_information["people_with_mask"] * 100 / total
+    percentage = (
+        statistic_information["people_with_mask"] * 100 / total
+        if total != 0
+        else 0
     )
+    statistic_dict["mask_percentage"].append(percentage)
 
     return statistic_dict
 
 
-def create_chart(reports=None, alerts=None):
+def create_chart(reports: Dict = {}, alerts: Dict = {}):
+    """
+    Create Plotly chart.
+
+    Arguments:
+        reports {Dict} -- Reports data.
+        alerts {Dict} -- Alerts data.
+    """
+
     # Create figure with secondary y-axis
     figure = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -100,8 +139,8 @@ def create_chart(reports=None, alerts=None):
 
     if alerts:
         alert_colors = {
-            "people_total": "salmon",
-            "people_with_mask": "coral",
+            "people_total": "red",
+            "people_with_mask": "salmon",
             "mask_percentage": "orange",
         }
         figure = add_trace(alerts, figure, alert_colors, trace_type="alert")
@@ -135,7 +174,16 @@ def create_chart(reports=None, alerts=None):
     return figure
 
 
-def add_trace(trace_information, figure, colors, trace_type=""):
+def add_trace(trace_information: Dict, figure, colors: Dict, trace_type=""):
+    """
+    Add new trace to Plotly chart.
+
+    Arguments:
+        trace_information {Dict} -- Trace to add.
+        figure -- Plotly chart.
+        colors {Dict} -- Colors to use in the new trace.
+        trace_type -- Alert or Report.
+    """
     figure.add_trace(
         go.Bar(
             x=trace_information["dates"],

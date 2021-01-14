@@ -1,16 +1,14 @@
 import streamlit as st
+from streamlit.hashing import _CodeHasher
 from streamlit.report_thread import get_report_ctx
 from streamlit.server.server import Server
-from streamlit.hashing import _CodeHasher
-
-
-def display_state_values(state):
-    st.write("selected_device state:", state.selected_device)
 
 
 class _SessionState:
     def __init__(self, session, hash_funcs):
-        """Initialize SessionState instance."""
+        """
+        Initialize SessionState instance.
+        """
         self.__dict__["_state"] = {
             "data": {},
             "hash": None,
@@ -20,17 +18,23 @@ class _SessionState:
         }
 
     def __call__(self, **kwargs):
-        """Initialize state data once."""
+        """
+        Initialize state data once.
+        """
         for item, value in kwargs.items():
             if item not in self._state["data"]:
                 self._state["data"][item] = value
 
     def __getitem__(self, item):
-        """Return a saved state value, None if item is undefined."""
+        """
+        Return a saved state value, None if item is undefined.
+        """
         return self._state["data"].get(item, None)
 
     def __getattr__(self, item):
-        """Return a saved state value, None if item is undefined."""
+        """
+        Return a saved state value, None if item is undefined.
+        """
         return self._state["data"].get(item, None)
 
     def __setitem__(self, item, value):
@@ -38,16 +42,22 @@ class _SessionState:
         self._state["data"][item] = value
 
     def __setattr__(self, item, value):
-        """Set state value."""
+        """
+        Set state value.
+        """
         self._state["data"][item] = value
 
     def clear(self):
-        """Clear session state and request a rerun."""
+        """
+        Clear session state and request a rerun.
+        """
         self._state["data"].clear()
         self._state["session"].request_rerun()
 
     def sync(self):
-        """Rerun the app with all state values up to date from the beginning to fix rollbacks."""
+        """
+        Rerun the app with all state values up to date from the beginning to fix rollbacks.
+        """
 
         # Ensure to rerun only once to avoid infinite loops
         # caused by a constantly changing state value at each run.
