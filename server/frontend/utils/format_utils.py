@@ -30,8 +30,12 @@ def format_data(statistics: List = [], group_data_by: str = None):
             alerts = add_information(alerts, statistic)
 
     # Aggregate data
-    reports = group_data(reports, group_data_by)
-    alerts = group_data(alerts, group_data_by)
+    if reports:
+        reports = group_data(reports, group_data_by)
+
+    if alerts:
+        alerts = group_data(alerts, group_data_by)
+
     return reports, alerts
 
 
