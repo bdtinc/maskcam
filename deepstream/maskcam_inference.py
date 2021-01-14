@@ -46,21 +46,33 @@ sys.path.append("../../filterpy")
 from norfair.tracker import Tracker, Detection
 
 
-# See ../yolo/data/obj.names
+# YOLO labels. See obj.names file
 PGIE_CLASS_ID_MASK = 0
 PGIE_CLASS_ID_NO_MASK = 1
 PGIE_CLASS_ID_NOT_VISIBLE = 2
 PGIE_CLASS_ID_MISPLACED = 3
+
+CODEC_MP4 = "MP4"
+CODEC_H265 = "H265"
+CODEC_H264 = "H264"
+
+# MQTT topics
+TOPIC_HELLO = "hello"
+TOPIC_STATS = "receive-from-jetson"
+TOPIC_ALERTS = "alerts"
+
+# Must come defined as environment var or MQTT gets disabled
+MQTT_BROKER_IP = os.environ.get("MQTT_BROKER_IP", None)
+MQTT_DEVICE_NAME = os.environ.get("MQTT_DEVICE_NAME", None)
+MQTT_DEVICE_DESCRIPTION = "MaskCam @ Jetson Nano"
+
+# Global vars
 frame_number = 0
 start_time = None
 end_time = None
 total_frames = 0
 sigint_received = False
 mqtt_client = None
-
-CODEC_MP4 = "MP4"
-CODEC_H265 = "H265"
-CODEC_H264 = "H264"
 
 
 class FaceMask:
@@ -157,6 +169,7 @@ def connect_mqtt_broker(
     def on_connect(client, userdata, flags, code):
         if code == 0:
             print("Connected to MQTT Broker")
+            say_hello()
         else:
             print(f"Failed to connect, return code {code}\n")
 
@@ -166,32 +179,38 @@ def connect_mqtt_broker(
     return client
 
 
-def cb_send_mqtt(cb_args):
-    mqtt_client, mqtt_device_name, mqtt_send_period = cb_args
-    # Test topic
-    test_topic = "test"
-    people_total, people_classified, people_mask = face_mask.get_statistics()
-    people_no_mask = people_classified - people_mask
-    test_result = mqtt_client.publish(
-        test_topic,
-        json.dumps(
-            {
-                "device_id": mqtt_device_name,
-                "people_total": people_total,
-                "people_with_mask": people_mask,
-                "people_without_mask": people_no_mask,
-                "timestamp": datetime.timestamp(datetime.now(timezone.utc)),
-            }
-        ),
+def send_mqtt_msg(topic, message):
+    # TODO: Handle queuing if mqtt_client not connected
+    result = mqtt_client.publish(topic, json.dumps(message))
+    if result[0] == 0:
+        print(f"[{topic}] MQTT message sent")
+    else:
+        print(f"[{topic}] MQTT message FAILED")
+
+
+def say_hello():
+    send_mqtt_msg(
+        TOPIC_HELLO, {"id": MQTT_DEVICE_NAME, "description": MQTT_DEVICE_DESCRIPTION}
     )
 
-    if test_result[0] == 0:
-        print(f"Send test msg to test topic")
-    else:
-        print(f"Failed to send message to test topic")
+
+def cb_send_statistics(cb_args):
+    mqtt_send_period = cb_args
+    # Test topic
+    topic = TOPIC_STATS  # TODO: implement TOPIC_ALERTS
+    people_total, people_classified, people_mask = face_mask.get_statistics()
+    people_no_mask = people_classified - people_mask
+    message = {
+        "device_id": MQTT_DEVICE_NAME,
+        "people_total": people_total,
+        "people_with_mask": people_mask,
+        "people_without_mask": people_no_mask,
+        "timestamp": datetime.timestamp(datetime.now(timezone.utc)),
+    }
+    send_mqtt_msg(topic, message)
 
     # Next report timeout
-    GLib.timeout_add_seconds(mqtt_send_period, cb_send_mqtt, cb_args)
+    GLib.timeout_add_seconds(mqtt_send_period, cb_send_statistics, cb_args)
 
 
 def is_aarch64():
@@ -481,10 +500,6 @@ def main(args):
     global sigint_received
     global mqtt_client
 
-    # Must come defined as environment var or MQTT gets disabled
-    mqtt_broker_ip = os.environ.get("MQTT_BROKER_IP", None)
-    mqtt_device_name = os.environ.get("MQTT_DEVICE_NAME", None)
-
     config = configparser.ConfigParser()
     config_file = "config_maskcam.txt"  # Also used in nvinfer element
     config.read(config_file)
@@ -520,16 +535,16 @@ def main(args):
     print(f"Playing file {input_filename}")
     print(f"Output codec: {codec}")
 
-    if mqtt_broker_ip is None or mqtt_device_name is None:
+    if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
         print(
             "\nMQTT is DISABLED since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
         )
     else:
-        print(f"\nConnecting to MQTT server IP: {mqtt_broker_ip}")
-        print(f"Device name: {mqtt_device_name}\n\n")
+        print(f"\nConnecting to MQTT server IP: {MQTT_BROKER_IP}")
+        print(f"Device name: {MQTT_DEVICE_NAME}\n\n")
         mqtt_client = connect_mqtt_broker(
-            client_id=mqtt_device_name,
-            broker_ip=mqtt_broker_ip,
+            client_id=MQTT_DEVICE_NAME,
+            broker_ip=MQTT_BROKER_IP,
             broker_port=mqtt_broker_port,
         )
         mqtt_client.loop_start()
@@ -734,8 +749,8 @@ def main(args):
     time_start_playing = time.time()
 
     if mqtt_client is not None:
-        cb_args = (mqtt_client, mqtt_device_name, mqtt_send_period)
-        GLib.timeout_add_seconds(mqtt_send_period, cb_send_mqtt, cb_args)
+        cb_args = mqtt_send_period
+        GLib.timeout_add_seconds(mqtt_send_period, cb_send_statistics, cb_args)
 
     try:
         g_loop.run()

@@ -68,7 +68,7 @@ streaming-clock-rate=90000
 # Recommended H264 for stability on video save
 codec=H264
 mqtt-broker-port=1883
-mqtt-send-period=30
+mqtt-send-period=5
 
 
 [property]
