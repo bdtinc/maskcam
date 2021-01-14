@@ -1,0 +1,154 @@
+from typing import List, Union, Dict
+
+from app.db.schema import DeviceModel
+
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import NoResultFound
+
+
+def create_device(
+    db_session: Session, device_information: Dict = {}
+) -> Union[DeviceModel, IntegrityError]:
+    """
+    Register new Jetson device.
+
+    Arguments:
+        db_session {Session} -- Database session.
+        device_information {Dict} -- New device information.
+
+    Returns:
+        Union[DeviceModel, IntegrityError] -- Device instance that was added
+        to the database or an exception in case the device already exists.
+
+    """
+    try:
+        device_information["id"] = device_information["id"].replace(" ", "_")
+        device = DeviceModel(**device_information)
+        db_session.add(device)
+        db_session.commit()
+        db_session.refresh(device)
+        return device
+
+    except IntegrityError:
+        db_session.rollback()
+        raise
+
+
+def get_device(
+    db_session: Session, device_id: str
+) -> Union[DeviceModel, NoResultFound]:
+    """
+    Get a specific device.
+
+    Arguments:
+        db_session {Session} -- Database session.
+        device_id {str} -- Jetson id.
+
+    Returns:
+        Union[DeviceModel, NoResultFound] -- Device instance which id is device_id
+        or an exception in case there's no matching device.
+
+    """
+    try:
+        return get_device_by_id(db_session, device_id)
+
+    except NoResultFound:
+        raise
+
+
+def get_devices(db_session: Session) -> List[DeviceModel]:
+    """
+    Get all devices.
+
+    Arguments:
+        db_session {Session} -- Database session.
+
+    Returns:
+        List[DeviceModel] -- All device instances present in the database.
+
+    """
+    return db_session.query(DeviceModel).all()
+
+
+def update_device(
+    db_session: Session, device_id: str, new_device_information: Dict = {}
+) -> Union[DeviceModel, NoResultFound]:
+    """
+    Modify a specific Jetson device.
+
+    Arguments:
+        db_session {Session} -- Database session.
+        device_id {str} -- Jetson id.
+        description {str} -- New device description.
+
+    Returns:
+        Union[DeviceModel, NoResultFound] -- Device instance which id is device_id
+        or an exception in case there's no matching device.
+
+    """
+    try:
+        try:
+            del new_device_information["id"]
+        except KeyError:
+            pass
+
+        device = get_device_by_id(db_session, device_id)
+
+        for key, value in new_device_information.items():
+            if hasattr(device, key):
+                setattr(device, key, value)
+
+        db_session.commit()
+        return device
+
+    except NoResultFound:
+        raise
+
+
+def delete_device(
+    db_session: Session, device_id: str
+) -> Union[DeviceModel, NoResultFound]:
+    """
+    Delete a device.
+
+    Arguments:
+        db_session {Session} -- Database session.
+        device_id {str} -- Jetson id.
+
+    Returns:
+        Union[DeviceModel, NoResultFound] -- Device instance that was deleted
+        or an exception in case there's no matching device.
+
+    """
+    try:
+        device = get_device_by_id(db_session, device_id)
+        db_session.delete(device)
+        db_session.commit()
+        return device
+
+    except NoResultFound:
+        raise
+
+
+def get_device_by_id(
+    db_session: Session, device_id: str
+) -> Union[DeviceModel, NoResultFound]:
+    """
+    Get a device using the table's primary key.
+
+    Arguments:
+        db_session {Session} -- Database session.
+        device_id {str} -- Jetson id.
+
+    Returns:
+        Union[DeviceModel, NoResultFound] -- Device instance which id is device_id
+        or an exception in case there's no matching device.
+
+    """
+    device = db_session.query(DeviceModel).get(device_id)
+
+    if not device:
+        raise NoResultFound()
+
+    return device
