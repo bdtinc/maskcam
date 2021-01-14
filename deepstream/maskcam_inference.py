@@ -473,33 +473,6 @@ def make_elm_or_print_err(factoryname, name, printedname, detail=""):
     return elm
 
 
-def set_nvtracker_configuration(tracker, config_file):
-    # Set properties of tracker
-    config = configparser.ConfigParser()
-    config.read(config_file)
-    config.sections()
-
-    for key in config["tracker"]:
-        if key == "tracker-width":
-            tracker_width = config.getint("tracker", key)
-            tracker.set_property("tracker-width", tracker_width)
-        if key == "tracker-height":
-            tracker_height = config.getint("tracker", key)
-            tracker.set_property("tracker-height", tracker_height)
-        if key == "gpu-id":
-            tracker_gpu_id = config.getint("tracker", key)
-            tracker.set_property("gpu_id", tracker_gpu_id)
-        if key == "ll-lib-file":
-            tracker_ll_lib_file = config.get("tracker", key)
-            tracker.set_property("ll-lib-file", tracker_ll_lib_file)
-        if key == "ll-config-file":
-            tracker_ll_config_file = config.get("tracker", key)
-            tracker.set_property("ll-config-file", tracker_ll_config_file)
-        if key == "enable-batch-process":
-            tracker_enable_batch_process = config.getint("tracker", key)
-            tracker.set_property("enable_batch_process", tracker_enable_batch_process)
-
-
 def main(args):
     global frame_number
     global total_frames
@@ -530,9 +503,6 @@ def main(args):
     else:
         input_filename = args[1]
         print(f"Provided input source: {input_filename}")
-
-    nvtracker_enabled = False  # Using Norfair
-    config_nvtracker = "config_nvtracker.txt"
 
     # Input camera configuration
     # Use ./gst_capabilities.sh to get the list of available capabilities from /dev/video0
@@ -631,11 +601,6 @@ def main(args):
     pgie = make_elm_or_print_err("nvinfer", "primary-inference", "pgie")
     pgie.set_property("config-file-path", config_file)
 
-    # Tracker by nvidia (not used, kept just in case)
-    if nvtracker_enabled:
-        tracker = make_elm_or_print_err("nvtracker", "tracker", "Tracker")
-        set_nvtracker_configuration(tracker, config_nvtracker)
-
     # Use convertor to convert from NV12 to RGBA as required by nvosd
     convert_pre_osd = make_elm_or_print_err(
         "nvvideoconvert", "convert_pre_osd", "Converter NV12->RGBA"
@@ -710,8 +675,6 @@ def main(args):
         pipeline.add(source_bin)
     pipeline.add(streammux)
     pipeline.add(pgie)
-    if nvtracker_enabled:
-        pipeline.add(tracker)
 
     pipeline.add(convert_pre_osd)
     pipeline.add(nvosd)
@@ -741,11 +704,7 @@ def main(args):
         sys.stderr.write(" Unable to get file source or mux sink pads \n")
     srcpad.link(sinkpad)
     streammux.link(pgie)
-    if nvtracker_enabled:
-        pgie.link(tracker)
-        tracker.link(convert_pre_osd)
-    else:
-        pgie.link(convert_pre_osd)
+    pgie.link(convert_pre_osd)
     convert_pre_osd.link(nvosd)
     nvosd.link(queue)
     queue.link(convert_post_osd)
