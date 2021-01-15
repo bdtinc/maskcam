@@ -1,28 +1,21 @@
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
-from app.db.utils import (
-    convert_timestamp_to_datetime,
-    get_enum_type,
-)
-from datetime import datetime
-
+from app.api import GenericException, ItemAlreadyExist, NoItemFoundException
 from app.db.cruds import (
-    get_statistic,
-    get_statistics,
-    update_statistic,
     create_statistic,
     delete_statistic,
+    get_statistic,
+    get_statistics,
     get_statistics_from_to,
+    update_statistic,
 )
-from app.db.schema import (
-    StatisticSchema,
-    get_db_generator,
-)
+from app.db.schema import StatisticSchema, get_db_generator
+from app.db.utils import convert_timestamp_to_datetime, get_enum_type
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
-from app.api import NoItemFoundException, GenericException, ItemAlreadyExist
 from sqlalchemy.orm.exc import NoResultFound
-from sqlalchemy.exc import IntegrityError, DataError
 
 statistic_router = APIRouter()
 
@@ -35,7 +28,20 @@ def create_statistic_item(
     statistic_information: Dict = {},
     db: Session = Depends(get_db_generator),
 ):
+    """
+    Create new statistic entry.
+
+    Arguments:
+        device_id {str} -- Device id which sent the statistic.
+        statistic_information {Dict} -- New statistic information.
+        db {Session} -- Database session.
+
+    Returns:
+        Union[StatisticSchema, ItemAlreadyExist] -- Statistic instance that was added
+        to the database or an exception in case a statistic already exists.
+    """
     try:
+        # Format input data
         statistic_information["device_id"] = device_id
         statistic_information["datetime"] = convert_timestamp_to_datetime(
             statistic_information["datetime"]
@@ -60,6 +66,18 @@ def get_statistic_item(
     timestamp: float,
     db: Session = Depends(get_db_generator),
 ):
+    """
+    Get a specific statistic.
+
+    Arguments:
+        device_id {str} -- Device id.
+        timestamp {float} -- Timestamp when the device registered the information.
+        db {Session} -- Database session.
+
+    Returns:
+        Union[StatisticSchema, NoItemFoundException] -- Statistic instance defined by device_id and
+        timestamp or an exception in case there's no matching statistic.
+    """
     try:
         return get_statistic(
             db_session=db,
@@ -72,7 +90,7 @@ def get_statistic_item(
 
 @statistic_router.get(
     "/devices/{device_id}/statistics",
-    # response_model=List[StatisticSchema],
+    response_model=List[StatisticSchema],
 )
 def get_all_device_statistics_items(
     device_id: str,
@@ -82,6 +100,21 @@ def get_all_device_statistics_items(
     timestampto: Optional[float] = Query(None),
     db: Session = Depends(get_db_generator),
 ):
+    """
+    Get all statistics of a specific device.
+
+    Arguments:
+        device_id {str} -- Device id.
+        datefrom {Optional[str]} -- Datetime to show information from.
+        dateto {Optional[str]} -- Datetime to show information to.
+        timestampfrom {Optional[float]} -- Timestamp to show information from.
+        timestampto {Optional[float]} -- Timestamp to show information from.
+        db {Session} -- Database session.
+
+    Returns:
+        List[StatisticSchema] -- Statistic instances defined by device_id and
+        datetime range.
+    """
     from_datetime = datefrom
     to_datetime = dateto
 
@@ -104,6 +137,15 @@ def get_all_device_statistics_items(
     response_model=List[StatisticSchema],
 )
 def get_all_statistics_items(db: Session = Depends(get_db_generator)):
+    """
+    Get all statistics from all devices.
+
+    Arguments:
+        db {Session} -- Database session.
+
+    Returns:
+        List[StatisticSchema] -- All statistic instances present in the database.
+    """
     return get_statistics(db_session=db)
 
 
@@ -117,6 +159,20 @@ def update_statistic_item(
     new_statistic_information: Dict = {},
     db: Session = Depends(get_db_generator),
 ):
+    """
+    Modify a specific statistic.
+
+    Arguments:
+        device_id {str} -- Device id.
+        timestamp {float} -- Timestamp when the device registered the information.
+        new_statistic_information {Dict} -- New statistic information.
+        db {Session} -- Database session.
+
+    Returns:
+        Union[StatisticSchema, NoItemFoundException, GenericException] -- Updated statistic
+        instance defined by device_id and datetime or an exception in case there's no
+        matching statistic.
+    """
     try:
         return update_statistic(
             db_session=db,
@@ -140,6 +196,18 @@ def delete_statistic_item(
     timestamp: float,
     db: Session = Depends(get_db_generator),
 ):
+    """
+    Delete a specific statistic.
+
+    Arguments:
+        device_id {str} -- Device id.
+        timestamp {float} -- Timestamp when the device registered the information.
+        db {Session} -- Database session.
+
+    Returns:
+        Union[StatisticSchema, NoItemFoundException, GenericException] -- Statistic instance
+        that was deleted or an exception in case there's no matching statistic.
+    """
     try:
         return delete_statistic(
             db_session=db,

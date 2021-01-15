@@ -20,10 +20,12 @@ def create_device(
     Returns:
         Union[DeviceModel, IntegrityError] -- Device instance that was added
         to the database or an exception in case the device already exists.
-
     """
     try:
+        # Replace empty spaces in device id
         device_information["id"] = device_information["id"].replace(" ", "_")
+
+        # Create device
         device = DeviceModel(**device_information)
         db_session.add(device)
         db_session.commit()
@@ -48,7 +50,6 @@ def get_device(
     Returns:
         Union[DeviceModel, NoResultFound] -- Device instance which id is device_id
         or an exception in case there's no matching device.
-
     """
     try:
         return get_device_by_id(db_session, device_id)
@@ -66,7 +67,6 @@ def get_devices(db_session: Session) -> List[DeviceModel]:
 
     Returns:
         List[DeviceModel] -- All device instances present in the database.
-
     """
     return db_session.query(DeviceModel).all()
 
@@ -80,15 +80,15 @@ def update_device(
     Arguments:
         db_session {Session} -- Database session.
         device_id {str} -- Jetson id.
-        description {str} -- New device description.
+        new_device_information {Dict} -- New device information.
 
     Returns:
         Union[DeviceModel, NoResultFound] -- Device instance which id is device_id
         or an exception in case there's no matching device.
-
     """
     try:
         try:
+            # Remove device id as it can't be modified
             del new_device_information["id"]
         except KeyError:
             pass

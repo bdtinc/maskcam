@@ -3,6 +3,16 @@ from paho.mqtt import client as mqtt_client
 
 
 def connect_mqtt_broker(client_id: str) -> mqtt_client:
+    """
+    Connect to MQTT broker.
+
+    Arguments:
+        client_id {str} -- Client process id.
+
+    Returns:
+        mqtt_client -- MQTT client.
+    """
+
     def on_connect(client, userdata, flags, code):
         if code == 0:
             print("Connected to MQTT Broker")

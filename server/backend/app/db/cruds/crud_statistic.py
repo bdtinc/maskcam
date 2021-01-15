@@ -21,7 +21,6 @@ def create_statistic(
     Returns:
         Union[StatisticsModel, IntegrityError] -- Statistic instance that was added
         to the database or an exception in case a statistic already exists.
-
     """
     try:
         statistic = StatisticsModel(**statistic_information)
@@ -49,7 +48,6 @@ def get_statistic(
     Returns:
         Union[StatisticsModel, NoResultFound] -- Statistic instance defined by device_id and datetime
         or an exception in case there's no matching statistic.
-
     """
     try:
         return get_statistic_by_id_and_datetime(db_session, device_id, datetime)
@@ -66,16 +64,19 @@ def get_statistics(
 
     Arguments:
         db_session {Session} -- Database session.
+        device_id {Optional[str]} -- Device id.
 
     Returns:
-        List[StatisticsModel] -- All statistic instances present in the database.
-
+        List[StatisticsModel] -- All statistic instances present in the database or
+        all statistics from a specific device.
     """
     if device_id:
+        # Get all statistics from a specific device
         query = db_session.query(StatisticsModel)
         return query.filter(StatisticsModel.device_id == device_id).all()
 
     else:
+        # Get all statistics from form the database
         return db_session.query(StatisticsModel).all()
 
 
@@ -86,19 +87,23 @@ def get_statistics_from_to(
     to_date: Optional[str] = None,
 ) -> List[StatisticsModel]:
     """
-    Get all statistics.
+    Get all statistics within a datetime range.
 
     Arguments:
         db_session {Session} -- Database session.
+        device_id {str} -- Device id.
+        from_date {Optional[str]} -- Beginning of datetime range.
+        to_date {Optional[str]} -- End of datetime range.
 
     Returns:
-        List[StatisticsModel] -- All statistic instances present in the database.
-
+        List[StatisticsModel] -- All statistic instances present in the database
+        within a given datetime range.
     """
     query = db_session.query(StatisticsModel)
     query = query.filter(StatisticsModel.device_id == device_id)
 
     if to_date is None:
+        # By default, show information until the current day
         to_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
     if from_date:
@@ -122,19 +127,21 @@ def update_statistic(
         db_session {Session} -- Database session.
         device_id {str} -- Jetson id which sent the information.
         datetime {datetime} -- Datetime when the device registered the information.
+        new_statistic_information {Dict} -- New statistic information.
 
     Returns:
         Union[StatisticsModel, NoResultFound] -- Updated statistic instance defined by device_id
         and datetime or an exception in case there's no matching statistic.
-
     """
     try:
         try:
+            # Remove device id as it can't be modified
             del new_statistic_information["device_id"]
         except KeyError:
             pass
 
         try:
+            # Remove datetime as it can't be modified
             del new_statistic_information["datetime"]
         except KeyError:
             pass
@@ -168,7 +175,6 @@ def delete_statistic(
     Returns:
         Union[StatisticsModel, NoResultFound] -- Statistic instance that was deleted
         or an exception in case there's no matching statistic.
-
     """
     try:
         statistic = get_statistic_by_id_and_datetime(
@@ -186,7 +192,7 @@ def get_statistic_by_id_and_datetime(
     db_session: Session, device_id: str, datetime: datetime
 ) -> Union[StatisticsModel, NoResultFound]:
     """
-    Get a device using the table's primary keys.
+    Get a statistic using the table's primary keys.
 
     Arguments:
         db_session {Session} -- Database session.
@@ -196,7 +202,6 @@ def get_statistic_by_id_and_datetime(
     Returns:
         Union[StatisticsModel, NoResultFound] -- Statistic instance defined by device_id and
         datetime or an exception in case there's no matching statistic.
-
     """
     statistic = db_session.query(StatisticsModel).get((device_id, datetime))
 

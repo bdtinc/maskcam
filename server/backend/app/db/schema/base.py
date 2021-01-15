@@ -26,7 +26,7 @@ def get_db_generator() -> Generator:
     Get a new create a new database generator.
 
     Returns:
-        Union[Session, Generator] -- New database generator.
+        Generator -- New database generator.
     """
     db = SessionLocal()
     try:

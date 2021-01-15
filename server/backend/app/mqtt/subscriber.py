@@ -11,6 +11,13 @@ from sqlalchemy.exc import IntegrityError
 
 
 def subscribe(client: mqtt_client):
+    """
+    Subscribe client to topic.
+
+    Arguments:
+        client {mqtt_client} -- Client process id.
+    """
+
     def on_message(client, userdata, msg):
         database_session = get_db_session()
         try:
@@ -23,6 +30,13 @@ def subscribe(client: mqtt_client):
 
 
 def process_message(database_session, msg):
+    """
+    Process message sent to topic.
+
+    Arguments:
+        database_session {Session} -- Database session.
+        msg {str} -- Received message.
+    """
     message = json.loads(msg.payload.decode())
 
     topic = msg.topic
