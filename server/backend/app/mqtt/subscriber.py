@@ -1,6 +1,6 @@
 import json
 
-from app.core.config import MQTT_CLIENT_TOPICS, SUSCRIBER_CLIENT_ID
+from app.core.config import MQTT_CLIENT_TOPICS, SUBSCRIBER_CLIENT_ID
 from app.db.cruds import create_device, create_statistic
 from app.db.schema import get_db_session
 from app.db.utils import convert_timestamp_to_datetime, get_enum_type
@@ -69,7 +69,7 @@ def process_message(database_session, msg):
 
 
 def main():
-    client = connect_mqtt_broker(client_id=SUSCRIBER_CLIENT_ID)
+    client = connect_mqtt_broker(client_id=SUBSCRIBER_CLIENT_ID)
     subscribe(client)
     client.loop_forever()
 

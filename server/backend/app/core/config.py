@@ -11,8 +11,8 @@ DB_URI = f"postgresql://{DB_USER}:{DB_PASSWORD}@db:{DB_PORT}/{DB_NAME}"
 MQTT_BROKER = os.environ["MQTT_BROKER"]
 MQTT_BROKER_PORT = int(os.environ["MQTT_BROKER_PORT"])
 
-# MQTT suscriber configuration
-SUSCRIBER_CLIENT_ID = os.environ["SUSCRIBER_CLIENT_ID"]
+# MQTT subscriber configuration
+SUBSCRIBER_CLIENT_ID = os.environ["SUBSCRIBER_CLIENT_ID"]
 
 # Topic configuration
 MQTT_HELLO_TOPIC = os.environ["MQTT_HELLO_TOPIC"]

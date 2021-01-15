@@ -4,5 +4,5 @@
 sleep 3
 alembic upgrade head
 
-# Init suscriber process
-python app/mqtt/suscriber.py &
+# Init subscriber process
+python app/mqtt/subscriber.py &
