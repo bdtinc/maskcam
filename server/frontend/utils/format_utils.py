@@ -52,7 +52,9 @@ def group_data(data: Dict, group_data_by: str):
     data_df["dates"] = pd.to_datetime(data_df["dates"])
 
     criterion = "H"
-    if group_data_by == "Minute":
+    if group_data_by == "Second":
+        criterion = "S"
+    elif group_data_by == "Minute":
         criterion = "T"
     elif group_data_by == "Day":
         criterion = "D"

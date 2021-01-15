@@ -43,8 +43,8 @@ def display_sidebar(all_devices, state):
 
     state.group_data_by = st.sidebar.selectbox(
         "Group data by",
-        ["Minute", "Hour", "Day", "Week", "Month"],
-        index=1,
+        ["Second", "Minute", "Hour", "Day", "Week", "Month"],
+        index=2,
     )
 
     state.show_only_one_chart = st.sidebar.checkbox(
