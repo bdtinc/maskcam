@@ -30,6 +30,7 @@ import signal
 import platform
 import configparser
 from datetime import datetime
+from rich import print
 
 gi.require_version("Gst", "1.0")
 gi.require_version("GstRtspServer", "1.0")
@@ -73,7 +74,7 @@ def main(args):
     server.get_mount_points().add_factory(rtsp_streaming_address, factory)
 
     print(
-        f"\n\nStreaming at rtsp://<jetson-ip>:{rtsp_streaming_port}{rtsp_streaming_address}\n\n"
+        f"\n\n[green bold]Streaming[/green bold] at rtsp://localhost:{rtsp_streaming_port}{rtsp_streaming_address}\n\n"
     )
 
     # GLib loop required for RTSP server
@@ -82,7 +83,7 @@ def main(args):
     try:
         g_loop.run()
     except KeyboardInterrupt:
-        print("Keyboard interruption received")
+        print("\n[yellow]Keyboard interruption received[/yellow]")
 
 
 if __name__ == "__main__":

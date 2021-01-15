@@ -34,6 +34,8 @@ import threading
 import configparser
 import numpy as np
 import json
+from rich import print
+from rich.console import Console
 from datetime import datetime, timezone
 from paho.mqtt import client as paho_mqtt_client
 
@@ -67,6 +69,8 @@ MQTT_BROKER_IP = os.environ.get("MQTT_BROKER_IP", None)
 MQTT_DEVICE_NAME = os.environ.get("MQTT_DEVICE_NAME", None)
 MQTT_DEVICE_DESCRIPTION = "MaskCam @ Jetson Nano"
 
+FRAMES_LOG_INTERVAL = 50
+
 # Global vars
 frame_number = 0
 start_time = None
@@ -74,6 +78,7 @@ end_time = None
 total_frames = 0
 sigint_received = False
 mqtt_client = None
+console = Console()
 
 
 class FaceMask:
@@ -112,6 +117,7 @@ class FaceMask:
                     self.people_votes[person_id] += 1
                 elif label == "no_mask" or "misplaced":
                     self.people_votes[person_id] -= 1
+                # max_votes limit
                 self.people_votes[person_id] = np.clip(
                     self.people_votes[person_id], -self.max_votes, self.max_votes
                 )
@@ -212,9 +218,10 @@ def send_mqtt_msg(topic, message):
     # TODO: Handle queuing if mqtt_client not connected
     result = mqtt_client.publish(topic, json.dumps(message))
     if result[0] == 0:
-        print(f"[{topic}] MQTT message sent: {message}")
+        console.log(f"MQTT message [green]SENT [bold][topic: {topic}][/bold][/green]")
     else:
-        print(f"[{topic}] MQTT message FAILED")
+        console.log(f"MQTT message [red]FAILED [bold][topic: {topic}][/bold][/red]")
+    print(message)
 
 
 def say_hello():
@@ -294,15 +301,15 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
 
     gst_buffer = info.get_buffer()
     if not gst_buffer:
-        print("Unable to get GstBuffer ")
+        console.log("Unable to get GstBuffer ")
         return
 
     # Retrieve batch metadata from the gst_buffer
     # Note that pyds.gst_buffer_get_nvds_batch_meta() expects the
     # C address of gst_buffer as input, which is obtained with hash(gst_buffer)
     batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
-    if not total_frames % 30:
-        print(f"Processed {total_frames} frames...")
+    if not total_frames % FRAMES_LOG_INTERVAL:
+        console.log(f"Processed {total_frames} frames...")
 
     l_frame = batch_meta.frame_meta_list
     while l_frame is not None:
@@ -775,7 +782,7 @@ def main(args):
     g_loop = GLib.MainLoop()
 
     # start play back and listen to events
-    print("Starting pipeline. Press Ctrl+C to stop processing")
+    print("Starting pipeline. [green bold]Press Ctrl+C to stop processing[/green bold]")
     pipeline.set_state(Gst.State.PLAYING)
     time_start_playing = time.time()
 
@@ -786,7 +793,7 @@ def main(args):
     try:
         g_loop.run()
     except KeyboardInterrupt:
-        print("Keyboard interruption received")
+        print("\n[yellow]Keyboard interruption received[/yellow]")
 
     end_time = time.time()
     print("Finished processing")
@@ -799,7 +806,7 @@ def main(args):
             total_frames - 1
         )  # Remove first frame as its inference is not counted
         inference_frames = total_frames // (inference_interval + 1)
-        print(f" ---- Profiling ---- ")
+        print(f"\n[bold yellow] ---- Profiling ---- [/bold yellow]")
         print(
             f"Inference frames: {inference_frames} | Processed frames: {total_frames}"
         )
@@ -808,10 +815,12 @@ def main(args):
         )
         print(f"Total time skipping first inference: {total_time:.2f} seconds")
         print(f"Avg. time/frame: {total_time/total_frames:.4f} secs")
-        print(f"FPS: {total_frames/total_time:.1f} frames/second")
+        print(
+            f"[bold yellow]FPS: {total_frames/total_time:.1f} frames/second[/bold yellow]\n"
+        )
         if inference_interval != 0:
             print(
-                f"WARNING: skipping inference every interval={inference_interval} frames"
+                f"[red]WARNING:[/red] skipping inference every interval={inference_interval} frames"
             )
 
 

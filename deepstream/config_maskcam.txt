@@ -60,7 +60,7 @@
 [maskcam]
 default-input=camera:///dev/video0
 output-dir=/dev/shm
-output-chunks-duration=25
+output-chunks-duration=10
 udp-port=5400
 streaming-port=8554
 streaming-clock-rate=90000

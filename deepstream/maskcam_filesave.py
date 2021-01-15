@@ -30,6 +30,7 @@ import signal
 import platform
 import configparser
 from datetime import datetime
+from rich import print
 
 gi.require_version("Gst", "1.0")
 gi.require_version("GstRtspServer", "1.0")
