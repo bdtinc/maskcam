@@ -29,18 +29,16 @@ import time
 import signal
 import platform
 import configparser
+import multiprocessing as mp
 from datetime import datetime
 from rich import print
 
 gi.require_version("Gst", "1.0")
 gi.require_version("GstRtspServer", "1.0")
 from gi.repository import GLib, Gst, GstRtspServer
+from common import CODEC_MP4, CODEC_H264, CODEC_H265, CONFIG_FILE
 
-sigint_received = False
-
-CODEC_MP4 = "MP4"
-CODEC_H265 = "H265"
-CODEC_H264 = "H264"
+e_interrupt = None
 
 
 def make_elm_or_print_err(factoryname, name, printedname, detail=""):
@@ -57,26 +55,24 @@ def make_elm_or_print_err(factoryname, name, printedname, detail=""):
     return elm
 
 
-def cb_timeout_stop_chunk(cb_args):
-    global sigint_received
-    print("Timeout to close file")
-    sigint_received = True
+def sigint_handler(sig, frame):
+    # This function is not used if e_external_interrupt is provided
+    e_interrupt.set()
 
 
-def main(args):
-    global sigint_received
+def main(
+    config: dict,
+    output_filename: str,
+    e_external_interrupt: mp.Event = None,
+    e_ready: mp.Event = None,
+):
+    global e_interrupt
 
-    config = configparser.ConfigParser()
-    config.read("config_maskcam.txt")
-    config.sections()
-    output_dir = config["maskcam"]["output-dir"]
-    chunk_duration = int(config["maskcam"]["output-chunks-duration"])
     udp_port = int(config["maskcam"]["udp-port"])
     codec = config["maskcam"]["codec"]
     streaming_clock_rate = int(config["maskcam"]["streaming-clock-rate"])
 
     udp_capabilities = f"application/x-rtp,media=video,encoding-name=(string){codec}"
-    output_file = f"{output_dir}/test_{datetime.today().strftime('%Y%m%d_%H%M%S')}.mp4"
 
     print(f"Codec: {codec}")
 
@@ -126,10 +122,9 @@ def main(args):
 
     container = make_elm_or_print_err("qtmux", "qtmux", "Container")
     filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
-    filesink.set_property("location", output_file)
+    filesink.set_property("location", output_filename)
     # filesink.set_property("sync", False)
     # filesink.set_property("async", False)
-    print(f"Starting new video file: {output_file}")
 
     pipeline.add(udpsrc)
     pipeline.add(rtpjitterbuffer)
@@ -156,6 +151,15 @@ def main(args):
     # GStreamer message bus
     bus = pipeline.get_bus()
 
+    if e_external_interrupt is None:
+        e_interrupt = mp.Event()
+        # Interrupt signal handler for custom loop, do this after GLib init
+        signal.signal(signal.SIGINT, sigint_handler)
+        print("[green bold]Press Ctrl+C to save video and exit[/green bold]")
+    else:
+        # If there's an external interrupt, don't capture SIGINT
+        e_interrupt = e_external_interrupt
+
     # Custom event loop, allows saving file on Ctrl+C press
     running = True
 
@@ -163,10 +167,10 @@ def main(args):
     print("Starting pipeline")
     pipeline.set_state(Gst.State.PLAYING)
 
-    GLib.timeout_add_seconds(chunk_duration, cb_timeout_stop_chunk, None)
+    if e_ready is not None:
+        e_ready.set()
 
     while running:
-
         # Workaround to avoid GStreamer to stop on SIGINT, we want EOS signal to propagate
         if pipeline.current_state is not Gst.State.PLAYING:
             pipeline.set_state(Gst.State.PLAYING)
@@ -177,8 +181,7 @@ def main(args):
             t = message.type
 
             if t == Gst.MessageType.EOS:
-                print("End-of-stream\n")
-                print(f"Written file: {output_file}")
+                print(f"File saved: {output_filename}")
                 running = False
             elif t == Gst.MessageType.WARNING:
                 err, debug = message.parse_warning()
@@ -187,19 +190,33 @@ def main(args):
                 err, debug = message.parse_error()
                 sys.stderr.write("Error: %s: %s\n" % (err, debug))
                 running = False
-            else:
-                time.sleep(1e-3)
-        if sigint_received:
+        else:
+            time.sleep(100e-3)  # Doesn't wait on messages
+        if e_interrupt.is_set():
             print("Interruption signal received. Sending EOS.")
-            sigint_received = False
+            e_interrupt.clear()
 
             # This will allow the filesink to create a readable mp4 file
             container.send_event(Gst.Event.new_eos())
 
-    print("Finished processing")
+    print("Finished filesaver")
     # cleanup
     pipeline.set_state(Gst.State.NULL)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE)
+    config.sections()
+
+    # Check arguments
+    if len(sys.argv) > 1:
+        output_filename = sys.argv[1]
+    else:
+        output_dir = config["maskcam"]["default-output-dir"]
+        output_filename = (
+            f"{output_dir}/{datetime.today().strftime('%Y%m%d_%H%M%S')}.mp4"
+        )
+    print(f"Output file: {output_filename}")
+
+    sys.exit(main(config=config, output_filename=output_filename))

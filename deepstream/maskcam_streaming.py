@@ -35,15 +35,12 @@ from rich import print
 gi.require_version("Gst", "1.0")
 gi.require_version("GstRtspServer", "1.0")
 from gi.repository import GLib, Gst, GstRtspServer
-
-CODEC_MP4 = "MP4"
-CODEC_H265 = "H265"
-CODEC_H264 = "H264"
+from common import CODEC_MP4, CODEC_H264, CODEC_H265, CONFIG_FILE
 
 
 def main(args):
     config = configparser.ConfigParser()
-    config.read("config_maskcam.txt")
+    config.read(CONFIG_FILE)
     config.sections()
     udp_port = int(config["maskcam"]["udp-port"])
     codec = config["maskcam"]["codec"]
@@ -84,6 +81,9 @@ def main(args):
         g_loop.run()
     except KeyboardInterrupt:
         print("\n[yellow]Keyboard interruption received[/yellow]")
+    except Exception as e:
+        print(f"Exception: {e}")
+    print("Ending streaming")
 
 
 if __name__ == "__main__":

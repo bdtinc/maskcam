@@ -26,6 +26,7 @@ import os
 import gi
 import pyds
 import sys
+import json
 import ipdb
 import time
 import signal
@@ -33,7 +34,7 @@ import platform
 import threading
 import configparser
 import numpy as np
-import json
+import multiprocessing as mp
 from rich import print
 from rich.console import Console
 from datetime import datetime, timezone
@@ -47,6 +48,7 @@ from gi.repository import GLib, Gst, GstRtspServer
 sys.path.append("../../norfair")
 sys.path.append("../../filterpy")
 from norfair.tracker import Tracker, Detection
+from common import CODEC_MP4, CODEC_H264, CODEC_H265, CAMERA_PROTOCOL, CONFIG_FILE
 
 
 # YOLO labels. See obj.names file
@@ -54,10 +56,6 @@ PGIE_CLASS_ID_MASK = 0
 PGIE_CLASS_ID_NO_MASK = 1
 PGIE_CLASS_ID_NOT_VISIBLE = 2
 PGIE_CLASS_ID_MISPLACED = 3
-
-CODEC_MP4 = "MP4"
-CODEC_H265 = "H265"
-CODEC_H264 = "H264"
 
 # MQTT topics
 TOPIC_HELLO = "hello"
@@ -76,9 +74,9 @@ frame_number = 0
 start_time = None
 end_time = None
 total_frames = 0
-sigint_received = False
 mqtt_client = None
 console = Console()
+e_interrupt = None
 
 
 class FaceMask:
@@ -249,6 +247,12 @@ def cb_send_statistics(cb_args):
 
     # Next report timeout
     GLib.timeout_add_seconds(mqtt_send_period, cb_send_statistics, cb_args)
+
+
+def sigint_handler(sig, frame):
+    # This function is not used if e_external_interrupt is provided
+    print("Ctrl+C pressed, interrupting...")
+    e_interrupt.set()
 
 
 def is_aarch64():
@@ -530,32 +534,24 @@ def make_elm_or_print_err(factoryname, name, printedname, detail=""):
     return elm
 
 
-def main(args):
+def main(
+    config: dict,
+    input_filename: str,
+    e_external_interrupt: mp.Event = None,
+    e_ready: mp.Event = None,
+):
     global frame_number
     global total_frames
     global start_time
     global end_time
-    global sigint_received
+    global e_interrupt
     global mqtt_client
 
-    config = configparser.ConfigParser()
-    config_file = "config_maskcam.txt"  # Also used in nvinfer element
-    config.read(config_file)
-    config.sections()
     udp_port = int(config["maskcam"]["udp-port"])
     codec = config["maskcam"]["codec"]
     mqtt_broker_port = int(config["maskcam"]["mqtt-broker-port"])
     mqtt_send_period = int(config["maskcam"]["mqtt-send-period"])
     inference_interval = int(config["property"]["interval"])
-
-    # Check input arguments
-    camera_protocol = "camera://"  # Invented by us since there's no URI for this
-    if len(args) != 2:
-        input_filename = config["maskcam"]["default-input"]
-        print(f"Using input from config file: {input_filename}")
-    else:
-        input_filename = args[1]
-        print(f"Provided input source: {input_filename}")
 
     # Input camera configuration
     # Use ./gst_capabilities.sh to get the list of available capabilities from /dev/video0
@@ -569,9 +565,6 @@ def main(args):
     output_width = 1024
     output_height = 608
     output_bitrate = 2000000  # Nice for h264@1024x576: 4000000
-
-    print(f"Playing file {input_filename}")
-    print(f"Output codec: {codec}")
 
     if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
         print(
@@ -609,9 +602,9 @@ def main(args):
         + "export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1\n"
     )
 
-    camera_input = camera_protocol in input_filename
+    camera_input = CAMERA_PROTOCOL in input_filename
     if camera_input:
-        input_device = input_filename[len(camera_protocol) :]
+        input_device = input_filename[len(CAMERA_PROTOCOL) :]
         print(f"Reading from camera device: {input_device}")
 
         source = make_elm_or_print_err("v4l2src", "v4l2-camera-source", "Camera input")
@@ -638,6 +631,7 @@ def main(args):
             "caps", Gst.Caps.from_string("video/x-raw(memory:NVMM)")
         )
     else:
+        print(f"Reading input file: {input_filename}")
         source_bin = create_source_bin(0, input_filename)
 
     # Create nvstreammux instance to form batches from one or more sources.
@@ -652,7 +646,7 @@ def main(args):
 
     # Inference element: object detection using TRT engine
     pgie = make_elm_or_print_err("nvinfer", "primary-inference", "pgie")
-    pgie.set_property("config-file-path", config_file)
+    pgie.set_property("config-file-path", CONFIG_FILE)
 
     # Use convertor to convert from NV12 to RGBA as required by nvosd
     convert_pre_osd = make_elm_or_print_err(
@@ -780,20 +774,57 @@ def main(args):
 
     # GLib loop required for RTSP server
     g_loop = GLib.MainLoop()
+    g_context = g_loop.get_context()
+
+    # GStreamer message bus
+    bus = pipeline.get_bus()
+
+    if e_external_interrupt is None:
+        e_interrupt = mp.Event()
+        # Custom interrupt handler, must be done after GLib MainLoop
+        signal.signal(signal.SIGINT, sigint_handler)
+        print("[green bold]Press Ctrl+C to stop pipeline[/green bold]")
+    else:
+        # If there's an external interrupt, don't capture SIGINT
+        e_interrupt = e_external_interrupt
 
     # start play back and listen to events
-    print("Starting pipeline. [green bold]Press Ctrl+C to stop processing[/green bold]")
     pipeline.set_state(Gst.State.PLAYING)
+
+    if e_ready is not None:
+        e_ready.set()
+
     time_start_playing = time.time()
 
     if mqtt_client is not None:
         cb_args = mqtt_send_period
         GLib.timeout_add_seconds(mqtt_send_period, cb_send_statistics, cb_args)
 
-    try:
-        g_loop.run()
-    except KeyboardInterrupt:
-        print("\n[yellow]Keyboard interruption received[/yellow]")
+    # Custom event loop
+    running = True
+    while running:
+
+        g_context.iteration(may_block=False)
+        message = bus.pop()
+        if message is not None:
+            t = message.type
+
+            if t == Gst.MessageType.EOS:
+                print("End-of-stream\n")
+                running = False
+            elif t == Gst.MessageType.WARNING:
+                err, debug = message.parse_warning()
+                console.log(f"[yellow]WARNING[/yellow] {err}: {debug}\n")
+            elif t == Gst.MessageType.ERROR:
+                err, debug = message.parse_error()
+                console.log(f"[red]ERROR [/red] {err}: {debug}\n")
+                running = False
+            else:
+                # 100ms pause if no messages, only affects termination
+                time.sleep(100e-3)
+        if e_interrupt.is_set():
+            print("\n[yellow]Interruption signal received. Terminating[/yellow]")
+            running = False
 
     end_time = time.time()
     print("Finished processing")
@@ -825,4 +856,16 @@ def main(args):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE)
+    config.sections()
+
+    # Check input arguments
+    if len(sys.argv) > 1:
+        input_filename = sys.argv[1]
+        print(f"Provided input source: {input_filename}")
+    else:
+        input_filename = config["maskcam"]["default-input"]
+        print(f"Using input from config file: {input_filename}")
+
+    sys.exit(main(config=config, input_filename=input_filename))
