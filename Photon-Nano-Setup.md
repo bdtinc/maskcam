@@ -12,11 +12,13 @@ The following software versions are used for this setup:
 Install the Jetson Nano SOM into the Photon carrier board. Follow [Connect Tech's instructions](https://connecttech.com/resource-center/kdb373/) to build a Jetson OS image on a host PC, install the Connect Tech Photon BSP on it, and flash it onto the Nano SOM over USB.
 
 ### 2. Boot up Jetson OS and remove unneeded software
-Power cycle the Photon carrier board or hit the RESET button to reboot it. Work through the Ubuntu setup dialog. When the NVIDIA desktop is displayed, open a terminal and issue the following commands to remove LibreOffice and Thunderbird.
+Power cycle the Photon carrier board or hit the RESET button to reboot it. Work through the Ubuntu setup dialog. When the NVIDIA desktop is displayed, open a terminal and issue the following commands to remove LibreOffice, Thunderbird, and some other miscellaneous files.
 
 ```
 sudo apt purge libreoffice*
 sudo apt purge thunderbird*
+sudo rm -rf /usr/share/example-content/Ubuntu_Free_Culture_Showcase/
+sudo rm -rf /usr/share/backgrounds
 ```
 
 This is necessary to free up about 400MB of storage space on the Nano. If this step is skipped, the Nano will be unable to boot after installing CUDA and Deepstream in Step 3, due to its storage space being completely full.
@@ -34,9 +36,11 @@ This leaves the Nano with very little storage space left. Free up more storage s
 sudo rm -rf /opt/nvidia/deepstream/deepstream-5.0/samples
 sudo rm -rf /usr/local/cuda-10.2/samples
 sudo rm -rf ~/VisionWorks-SFM-0.90-Samples
-sudo rm -rf /usr/share/example-content/Ubuntu_Free_Culture_Showcase/
-sudo rm -rf /usr/share/backgrounds
+
 ```
+
+### 4. Mount SD Card-based drive
+There still isn't quite enough storage space to set up MaskCam on the Nano's 16GB eMMC chip. Insert an
 
 ### 4. Set up MaskCam directory
 On the Photon Nano, create a MaskCam folder inside the home directory (/home/<username>) and cd into it using
@@ -52,6 +56,11 @@ Clone this repository, the [norfair repository](https://github.com/tryolabs/norf
 git clone git@github.com:tryolabs/bdti-jetson.git
 git clone git@github.com:tryolabs/norfair.git
 git clone git@github.com:rlabbe/filterpy.git
+```
+
+Remove the data directory from the bdti-jetson repository using
+```
+rm -rf ~/MaskCam/bdti-jetson/yolo/data
 ```
 
 ### 5. Update NVIDIA apt sources list
