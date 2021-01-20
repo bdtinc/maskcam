@@ -59,6 +59,10 @@
 
 [maskcam]
 default-input=camera:///dev/video0
+
+# Run utils/gst_capabilities.sh and find some combination with framerate <= 14 fps
+camera-framerate=10/1
+
 default-output-dir=/dev/shm
 udp-port=5400
 streaming-port=8554

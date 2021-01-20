@@ -519,7 +519,7 @@ def create_source_bin(index, uri):
     return nbin
 
 
-def make_elm_or_print_err(factoryname, name, printedname, detail=""):
+def make_elm_or_print_err(factoryname, name, printedname):
     """Creates an element with Gst Element Factory make.
     Return the element  if successfully created, otherwise print
     to stderr and return None.
@@ -528,9 +528,33 @@ def make_elm_or_print_err(factoryname, name, printedname, detail=""):
     elm = Gst.ElementFactory.make(factoryname, name)
     if not elm:
         sys.stderr.write("Unable to create " + printedname + " \n")
-        if detail:
-            sys.stderr.write(detail)
+        show_troubleshooting()
     return elm
+
+
+def show_troubleshooting():
+    # On Jetson, there is a problem with the encoder failing to initialize
+    # due to limitation on TLS usage. To work around this, preload libgomp.
+    # Add a reminder here in case the user forgets.
+    print(
+        """
+    [yellow]TROUBLESHOOTING HELP[/yellow]
+
+    [yellow]If the error is like: v4l-camera-source / reason not-negotiated[/yellow]
+    [green]Solution:[/green] configure camera capabilities
+    Run the script under utils/gst_capabilities.sh and find a line with type
+    video/x-raw, and a framerate below 14, e.g: 10/1 or 5/1.
+    Then edit config_maskcam.txt and change the line:
+    camera-framerate=10/1
+
+    [yellow]If the error is like:
+    /usr/lib/aarch64-linux-gnu/libgomp.so.1: cannot allocate memory in static TLS block[/yellow]
+    [green]Solution:[/green] preload the offending library
+    export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1
+
+    [yellow]END HELP[/yellow]
+    """
+    )
 
 
 def main(
@@ -552,13 +576,11 @@ def main(
     mqtt_send_period = int(config["maskcam"]["mqtt-send-period"])
     inference_interval = int(config["property"]["interval"])
 
+    camera_framerate = config["maskcam"]["camera-framerate"]  # e.g: 10/1, 15/1
+
     # Input camera configuration
     # Use ./gst_capabilities.sh to get the list of available capabilities from /dev/video0
-    input_width = 1024
-    input_height = 576
-    camera_capabilities = (
-        f"video/x-raw, framerate=10/1, width={input_width}, height={input_height}"
-    )
+    camera_capabilities = f"video/x-raw, framerate={camera_framerate}"
 
     # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
     output_width = 1920
@@ -590,16 +612,6 @@ def main(
 
     if not pipeline:
         sys.stderr.write(" Unable to create Pipeline \n")
-
-    # On Jetson, there is a problem with the encoder failing to initialize
-    # due to limitation on TLS usage. To work around this, preload libgomp.
-    # Add a reminder here in case the user forgets.
-    preload_reminder = (
-        "If the following error is encountered:\n"
-        + "/usr/lib/aarch64-linux-gnu/libgomp.so.1: cannot allocate memory in static TLS block\n"
-        + "Preload the offending library:\n"
-        + "export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1\n"
-    )
 
     camera_input = CAMERA_PROTOCOL in input_filename
     if camera_input:
@@ -678,27 +690,21 @@ def main(
     # Encoder: H265 has more efficient compression
     if codec == CODEC_MP4:
         print("Creating MPEG-4 stream")
-        encoder = make_elm_or_print_err(
-            "avenc_mpeg4", "encoder", "Encoder", preload_reminder
-        )
+        encoder = make_elm_or_print_err("avenc_mpeg4", "encoder", "Encoder")
         codeparser = make_elm_or_print_err(
             "mpeg4videoparse", "mpeg4-parser", "Code Parser"
         )
         rtppay = make_elm_or_print_err("rtpmp4vpay", "rtppay", "RTP MPEG-44 Payload")
     elif codec == CODEC_H264:
         print("Creating H264 stream")
-        encoder = make_elm_or_print_err(
-            "nvv4l2h264enc", "encoder", "Encoder", preload_reminder
-        )
+        encoder = make_elm_or_print_err("nvv4l2h264enc", "encoder", "Encoder")
         encoder.set_property("preset-level", 1)
         encoder.set_property("bufapi-version", 1)
         codeparser = make_elm_or_print_err("h264parse", "h264-parser", "Code Parser")
         rtppay = make_elm_or_print_err("rtph264pay", "rtppay", "RTP H264 Payload")
     else:  # Default: H265 (recommended)
         print("Creating H265 stream")
-        encoder = make_elm_or_print_err(
-            "nvv4l2h265enc", "encoder", "Encoder", preload_reminder
-        )
+        encoder = make_elm_or_print_err("nvv4l2h265enc", "encoder", "Encoder")
         encoder.set_property("preset-level", 1)
         encoder.set_property("bufapi-version", 1)
         codeparser = make_elm_or_print_err("h265parse", "h265-parser", "Code Parser")
@@ -858,6 +864,7 @@ def main(
                 elif t == Gst.MessageType.ERROR:
                     err, debug = message.parse_error()
                     console.log(f"[red]ERROR [/red] {err}: {debug}\n")
+                    show_troubleshooting()
                     running = False
                 else:
                     # 100ms pause if no messages, only affects termination
@@ -866,7 +873,9 @@ def main(
                 # Send EOS to container to generate a valid mp4 file
                 if output_filename is not None:
                     container.send_event(Gst.Event.new_eos())
-                udpsink.send_event(Gst.Event.new_eos())
+                    udpsink.send_event(Gst.Event.new_eos())
+                else:
+                    pipeline.send_event(Gst.Event.new_eos())  # fakesink EOS won't work
 
         end_time = time.time()
         print("Inference main loop ending.")
