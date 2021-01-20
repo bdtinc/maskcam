@@ -52,7 +52,7 @@ git clone git@github.com:rlabbe/filterpy.git
 ```
 
 ## 5. Update NVIDIA apt sources list
-Open the NVIDIA apt sources list using `sudo gedit /etc/apt/sources.list.d/nvidia-l4t-apt-source.list` . Make sure it contains the following lines:
+Open the NVIDIA apt sources list using `sudo gedit /etc/apt/sources.list.d/nvidia-l4t-apt-source.list` . Remove the "#" in front of each line so it looks like this:
 
 ```
 deb https://repo.download.nvidia.com/jetson/common r32.4 main
