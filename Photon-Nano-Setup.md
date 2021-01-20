@@ -26,5 +26,11 @@ Plug an ethernet cable into both the host PC and the Photon Nano. Open SDK Manag
 
 *Insert image here :)*
 
-A window will open asking to enter the IP address, username, and password for the Photon Nano. You can check the Nano's IP address by opening a terminal on the Photon Nano and issuing `ifconfig`. (The default IP address is 192.168.1.119.) Enter the IP address, username, and password, then click "Flash". This will install the selected SDK Components over an SSH connection. The process takes about 30 minutes.
+A window will open asking to enter the IP address, username, and password for the Photon Nano. You can check the Nano's IP address by opening a terminal on the Photon Nano and issuing `ifconfig`. (The default IP address is 192.168.1.119.) Enter the IP address, username, and password, then click "Flash". This will install the selected SDK Components over an SSH connection. The process takes about 30 minutes. Reboot the Photon Nano after it's finished.
 
+## 4. Set up MaskCam directory
+Create a MaskCam folder inside the home directory (/home/<username>) and cd into it using
+```
+mkdir ~/MaskCam
+cd ~/MaskCam
+```
