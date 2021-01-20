@@ -28,9 +28,36 @@ Plug an ethernet cable into both the host PC and the Photon Nano. Open SDK Manag
 
 A window will open asking to enter the IP address, username, and password for the Photon Nano. You can check the Nano's IP address by opening a terminal on the Photon Nano and issuing `ifconfig`. (The default IP address is 192.168.1.119.) Enter the IP address, username, and password, then click "Flash". This will install the selected SDK Components over an SSH connection. The process takes about 30 minutes. Reboot the Photon Nano after it's finished.
 
+This leaves the Nano with very little storage space left. Free up more storage space by removing the Deepstream and CUDA sample directories. On the Photon Nano, issue:
+
+```
+sudo rm -rf /opt/nvidia/deepstream/deepstream-5.0/samples
+sudo rm -rf /usr/local/cuda-10.2/samples
+```
+
 ## 4. Set up MaskCam directory
-Create a MaskCam folder inside the home directory (/home/<username>) and cd into it using
+On the Photon Nano, create a MaskCam folder inside the home directory (/home/<username>) and cd into it using
+
 ```
 mkdir ~/MaskCam
 cd ~/MaskCam
 ```
+
+Clone this repository, the [norfair repository](https://github.com/tryolabs/norfair), and the [filterpy](https://github.com/rlabbe/filterpy) repository from GitHub using the following commands. To clone these repositories, SSH keys will need to be set up on the Photon Nano (see [these instructions](https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh)).
+
+```
+git clone git@github.com:tryolabs/bdti-jetson.git
+git clone git@github.com:tryolabs/norfair.git
+git clone git@github.com:rlabbe/filterpy.git
+```
+
+## 5. Update NVIDIA apt sources list
+Open the NVIDIA apt sources list using `sudo gedit /etc/apt/sources.list.d/nvidia-l4t-apt-source.list` . Make sure it contains the following lines:
+
+```
+deb https://repo.download.nvidia.com/jetson/common r32.4 main
+deb https://repo.download.nvidia.com/jetson/<platform> r32.4 main
+```
+
+Save and exit the file. Then, issue "sudo apt update" to update the package list.
+
