@@ -536,6 +536,7 @@ def make_elm_or_print_err(factoryname, name, printedname, detail=""):
 def main(
     config: dict,
     input_filename: str,
+    output_filename: str = None,
     e_external_interrupt: mp.Event = None,
 ):
     global frame_number
@@ -603,8 +604,6 @@ def main(
     camera_input = CAMERA_PROTOCOL in input_filename
     if camera_input:
         input_device = input_filename[len(CAMERA_PROTOCOL) :]
-        print(f"Reading from camera device: {input_device}")
-
         source = make_elm_or_print_err("v4l2src", "v4l2-camera-source", "Camera input")
         source.set_property("device", input_device)
 
@@ -629,7 +628,6 @@ def main(
             "caps", Gst.Caps.from_string("video/x-raw(memory:NVMM)")
         )
     else:
-        print(f"Reading input file: {input_filename}")
         source_bin = create_source_bin(0, input_filename)
 
     # Create nvstreammux instance to form batches from one or more sources.
@@ -683,6 +681,9 @@ def main(
         encoder = make_elm_or_print_err(
             "avenc_mpeg4", "encoder", "Encoder", preload_reminder
         )
+        codeparser = make_elm_or_print_err(
+            "mpeg4videoparse", "mpeg4-parser", "Code Parser"
+        )
         rtppay = make_elm_or_print_err("rtpmp4vpay", "rtppay", "RTP MPEG-44 Payload")
     elif codec == CODEC_H264:
         print("Creating H264 stream")
@@ -691,6 +692,7 @@ def main(
         )
         encoder.set_property("preset-level", 1)
         encoder.set_property("bufapi-version", 1)
+        codeparser = make_elm_or_print_err("h264parse", "h264-parser", "Code Parser")
         rtppay = make_elm_or_print_err("rtph264pay", "rtppay", "RTP H264 Payload")
     else:  # Default: H265 (recommended)
         print("Creating H265 stream")
@@ -699,10 +701,15 @@ def main(
         )
         encoder.set_property("preset-level", 1)
         encoder.set_property("bufapi-version", 1)
+        codeparser = make_elm_or_print_err("h265parse", "h265-parser", "Code Parser")
         rtppay = make_elm_or_print_err("rtph265pay", "rtppay", "RTP H265 Payload")
 
     encoder.set_property("insert-sps-pps", 1)
     encoder.set_property("bitrate", output_bitrate)
+
+    splitter_file_udp = make_elm_or_print_err(
+        "tee", "tee_file_udp", "Splitter file/UDP"
+    )
 
     # UDP streaming
     queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
@@ -711,6 +718,15 @@ def main(
     udpsink.set_property("port", udp_port)
     udpsink.set_property("async", False)
     udpsink.set_property("sync", True)
+
+    if output_filename is not None:
+        queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
+        # codeparser already created above depending on codec
+        container = make_elm_or_print_err("qtmux", "qtmux", "Container")
+        filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
+        filesink.set_property("location", output_filename)
+    else:  # Fake sink, no save
+        fakesink = make_elm_or_print_err("fakesink", "fakesink", "Fake Sink")
 
     # Add elements to the pipeline
     if camera_input:
@@ -730,6 +746,15 @@ def main(
     pipeline.add(convert_post_osd)
     pipeline.add(capsfilter)
     pipeline.add(encoder)
+    pipeline.add(splitter_file_udp)
+
+    if output_filename is not None:
+        pipeline.add(queue_file)
+        pipeline.add(codeparser)
+        pipeline.add(container)
+        pipeline.add(filesink)
+    else:
+        pipeline.add(fakesink)
 
     # Output to UDP
     pipeline.add(queue_udp)
@@ -758,9 +783,23 @@ def main(
     queue.link(convert_post_osd)
     convert_post_osd.link(capsfilter)
     capsfilter.link(encoder)
-    encoder.link(queue_udp)
+    encoder.link(splitter_file_udp)
+
+    # Split stream to file and rtsp
+    tee_file = splitter_file_udp.get_request_pad("src_%u")
+    tee_udp = splitter_file_udp.get_request_pad("src_%u")
+
+    # Output to File or fake sinks
+    if output_filename is not None:
+        tee_file.link(queue_file.get_static_pad("sink"))
+        queue_file.link(codeparser)
+        codeparser.link(container)
+        container.link(filesink)
+    else:
+        tee_file.link(fakesink.get_static_pad("sink"))
 
     # Output to UDP
+    tee_udp.link(queue_udp.get_static_pad("sink"))
     queue_udp.link(rtppay)
     rtppay.link(udpsink)
 
@@ -802,26 +841,32 @@ def main(
             GLib.timeout_add_seconds(mqtt_send_period, cb_send_statistics, cb_args)
 
         # Custom event loop
-        while not e_interrupt.is_set():
-
+        running = True
+        while running:
             g_context.iteration(may_block=False)
+
             message = bus.pop()
             if message is not None:
                 t = message.type
 
                 if t == Gst.MessageType.EOS:
                     print("End-of-stream\n")
-                    e_interrupt.set()
+                    running = False
                 elif t == Gst.MessageType.WARNING:
                     err, debug = message.parse_warning()
                     console.log(f"[yellow]WARNING[/yellow] {err}: {debug}\n")
                 elif t == Gst.MessageType.ERROR:
                     err, debug = message.parse_error()
                     console.log(f"[red]ERROR [/red] {err}: {debug}\n")
-                    e_interrupt.set()
+                    running = False
                 else:
                     # 100ms pause if no messages, only affects termination
                     time.sleep(100e-3)
+            if e_interrupt.is_set():
+                # Send EOS to container to generate a valid mp4 file
+                if output_filename is not None:
+                    container.send_event(Gst.Event.new_eos())
+                udpsink.send_event(Gst.Event.new_eos())
 
         end_time = time.time()
         print("Inference main loop ending.")
@@ -850,6 +895,8 @@ def main(
                 print(
                     f"[red]WARNING:[/red] skipping inference every interval={inference_interval} frames"
                 )
+        if output_filename is not None:
+            print(f"Output file saved: [green bold]{output_filename}[/green bold]")
     except:
         console.print_exception()
         pipeline.set_state(Gst.State.NULL)
@@ -861,11 +908,21 @@ if __name__ == "__main__":
     config.sections()
 
     # Check input arguments
+    output_filename = None
     if len(sys.argv) > 1:
         input_filename = sys.argv[1]
         print(f"Provided input source: {input_filename}")
+        if len(sys.argv) > 2:
+            output_filename = sys.argv[2]
+            print(f"Save output file: [green]{output_filename}[/green]")
     else:
         input_filename = config["maskcam"]["default-input"]
         print(f"Using input from config file: {input_filename}")
 
-    sys.exit(main(config=config, input_filename=input_filename))
+    sys.exit(
+        main(
+            config=config,
+            input_filename=input_filename,
+            output_filename=output_filename,
+        )
+    )

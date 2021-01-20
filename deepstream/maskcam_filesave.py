@@ -176,10 +176,6 @@ def main(
     pipeline.set_state(Gst.State.PLAYING)
 
     while running:
-        # Workaround to avoid GStreamer to stop on SIGINT, we want EOS signal to propagate
-        if pipeline.current_state is not Gst.State.PLAYING:
-            pipeline.set_state(Gst.State.PLAYING)
-
         g_context.iteration(may_block=False)
         message = bus.pop()
         if message is not None:

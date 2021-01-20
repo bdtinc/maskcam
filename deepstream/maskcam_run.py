@@ -94,39 +94,48 @@ if __name__ == "__main__":
             )
         else:
             output_filename = f"output_{input_filename.split('/')[-1]}"
-        print(f"Output file: {output_filename}")
+        print(f"Output file: [green]{output_filename}[/green]")
 
         signal.signal(signal.SIGINT, sigint_handler)
         print("[green bold]Press Ctrl+C to stop all processes[/green bold]")
 
-        # Inference process
+        process_inference = None
+        process_filesave = None
+
+        # Inference process: If input is a file, also saves file
+        inference_savefile = None if is_live_input else output_filename
         process_inference, e_interrupt_inference = start_process(
-            "inference", inference_main, config, input_filename=input_filename
+            "inference",
+            inference_main,
+            config,
+            input_filename=input_filename,
+            output_filename=inference_savefile,
         )
 
         # TODO: Implement MQTT
         # TODO: Implement streaming
         # TODO: Implement periodic filesaving
 
-        # Video file save process
-        process_filesave, e_interrupt_filesave = start_process(
-            "file-save", filesave_main, config, output_filename=output_filename
-        )
+        if is_live_input:
+            # Video file save process
+            process_filesave, e_interrupt_filesave = start_process(
+                "file-save", filesave_main, config, output_filename=output_filename
+            )
 
         while not e_interrupt.is_set():
             if not process_inference.is_alive():
-                print(f"Inference process has ended, finish all processes")
                 e_interrupt.set()
             e_interrupt.wait(timeout=0.5)
     except:
         console.print_exception()
 
-    print("Trying to stop running processes...")
     try:
         # If process_inference was not created will throw exception, but process_filesave
         # won't have been created either so it's not important to shut it down.
-        if process_inference.is_alive():
+        if process_inference is not None and process_inference.is_alive():
             terminate_process("inference", process_inference, e_interrupt_inference)
-        terminate_process("file-save", process_filesave, e_interrupt_filesave)
+        if process_filesave is not None and process_filesave.is_alive():
+            terminate_process("file-save", process_filesave, e_interrupt_filesave)
     except:
-        pass
+        console.print("\n\nAn exception occurred trying to terminate some process")
+        console.print_exception()
