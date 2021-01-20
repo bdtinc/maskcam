@@ -71,6 +71,7 @@ mqtt-send-period=20
 
 
 [property]
+interval=0
 gpu-id=0
 # Was: 
 net-scale-factor=0.0039215697906911373
@@ -91,7 +92,6 @@ network-type=0
 # Default: 2
 cluster-mode=2
 # Skip inference these frames
-interval=0
 maintain-aspect-ratio=0
 parse-bbox-func-name=NvDsInferParseCustomYoloV4
 engine-create-func-name=NvDsInferYoloCudaEngineGet

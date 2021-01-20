@@ -29,13 +29,15 @@ import time
 import signal
 import platform
 import configparser
+import threading
 import multiprocessing as mp
 from datetime import datetime
 from rich import print
 
 gi.require_version("Gst", "1.0")
+gi.require_version("GstBase", "1.0")
 gi.require_version("GstRtspServer", "1.0")
-from gi.repository import GLib, Gst, GstRtspServer
+from gi.repository import GLib, Gst, GstRtspServer, GstBase
 from common import CODEC_MP4, CODEC_H264, CODEC_H265, CONFIG_FILE
 
 e_interrupt = None
@@ -57,6 +59,7 @@ def make_elm_or_print_err(factoryname, name, printedname, detail=""):
 
 def sigint_handler(sig, frame):
     # This function is not used if e_external_interrupt is provided
+    print("\n[red]Ctrl+C pressed. Interrupting...[/red]")
     e_interrupt.set()
 
 
@@ -64,7 +67,6 @@ def main(
     config: dict,
     output_filename: str,
     e_external_interrupt: mp.Event = None,
-    e_ready: mp.Event = None,
 ):
     global e_interrupt
 
@@ -72,7 +74,7 @@ def main(
     codec = config["maskcam"]["codec"]
     streaming_clock_rate = int(config["maskcam"]["streaming-clock-rate"])
 
-    udp_capabilities = f"application/x-rtp,media=video,encoding-name=(string){codec}"
+    udp_capabilities = f"application/x-rtp,media=video,encoding-name=(string){codec},clock-rate={streaming_clock_rate}"
 
     print(f"Codec: {codec}")
 
@@ -90,11 +92,13 @@ def main(
 
     udpsrc = make_elm_or_print_err("udpsrc", "udpsrc", "UDP Source")
     udpsrc.set_property("port", udp_port)
-    # udpsrc.set_property("buffer-size", 524288)
+    udpsrc.set_property("buffer-size", 524288)
     udpsrc.set_property("caps", Gst.Caps.from_string(udp_capabilities))
     rtpjitterbuffer = make_elm_or_print_err(
         "rtpjitterbuffer", "rtpjitterbuffer", "RTP Jitter Buffer"
     )
+    # Default mode is 1 (slave), acts as a live source and gets laggy
+    rtpjitterbuffer.set_property("mode", 4)
 
     # caps_udp = make_elm_or_print_err("capsfilter", "caps_udp", "UDP RTP capabilities")
     # caps_udp.set_property("caps", Gst.Caps.from_string(udp_capabilities))
@@ -119,6 +123,9 @@ def main(
             "rtph265depay", "rtpdepay", "RTP H265 Payload Decoder"
         )
         codeparser = make_elm_or_print_err("h265parse", "h265-parser", "Code Parser")
+
+    # Workaround for this issue: https://gitlab.freedesktop.org/gstreamer/gst-plugins-good/-/issues/410
+    GstBase.BaseParse.set_pts_interpolation(codeparser, True)
 
     container = make_elm_or_print_err("qtmux", "qtmux", "Container")
     filesink = make_elm_or_print_err("filesink", "filesink", "File Sink")
@@ -152,8 +159,9 @@ def main(
     bus = pipeline.get_bus()
 
     if e_external_interrupt is None:
-        e_interrupt = mp.Event()
-        # Interrupt signal handler for custom loop, do this after GLib init
+        # Use threading instead of mp.Event() for sigint_handler, see:
+        # https://bugs.python.org/issue41606
+        e_interrupt = threading.Event()
         signal.signal(signal.SIGINT, sigint_handler)
         print("[green bold]Press Ctrl+C to save video and exit[/green bold]")
     else:
@@ -167,9 +175,6 @@ def main(
     print("Starting pipeline")
     pipeline.set_state(Gst.State.PLAYING)
 
-    if e_ready is not None:
-        e_ready.set()
-
     while running:
         # Workaround to avoid GStreamer to stop on SIGINT, we want EOS signal to propagate
         if pipeline.current_state is not Gst.State.PLAYING:
@@ -181,7 +186,7 @@ def main(
             t = message.type
 
             if t == Gst.MessageType.EOS:
-                print(f"File saved: {output_filename}")
+                print(f"File saved: [yellow]{output_filename}[/yellow]")
                 running = False
             elif t == Gst.MessageType.WARNING:
                 err, debug = message.parse_warning()
@@ -193,13 +198,12 @@ def main(
         else:
             time.sleep(100e-3)  # Doesn't wait on messages
         if e_interrupt.is_set():
-            print("Interruption signal received. Sending EOS.")
-            e_interrupt.clear()
-
+            print("Interruption received. Sending EOS to generate video file.")
             # This will allow the filesink to create a readable mp4 file
             container.send_event(Gst.Event.new_eos())
+            e_interrupt.clear()
 
-    print("Finished filesaver")
+    print("File-saver main loop ending.")
     # cleanup
     pipeline.set_state(Gst.State.NULL)
 

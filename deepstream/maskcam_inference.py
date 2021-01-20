@@ -251,7 +251,7 @@ def cb_send_statistics(cb_args):
 
 def sigint_handler(sig, frame):
     # This function is not used if e_external_interrupt is provided
-    print("Ctrl+C pressed, interrupting...")
+    print("\n[red]Ctrl+C pressed. Interrupting...[/red]")
     e_interrupt.set()
 
 
@@ -475,11 +475,10 @@ def cb_newpad(decodebin, decoder_src_pad, data):
 
 
 def decodebin_child_added(child_proxy, Object, name, user_data):
-    print("Decodebin child added:", name, "\n")
+    print(f"Decodebin child added: {name}")
     if name.find("decodebin") != -1:
         Object.connect("child-added", decodebin_child_added, user_data)
     if is_aarch64() and name.find("nvv4l2decoder") != -1:
-        print("Seting bufapi_version\n")
         Object.set_property("bufapi-version", True)
 
 
@@ -538,7 +537,6 @@ def main(
     config: dict,
     input_filename: str,
     e_external_interrupt: mp.Event = None,
-    e_ready: mp.Event = None,
 ):
     global frame_number
     global total_frames
@@ -562,8 +560,8 @@ def main(
     )
 
     # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
-    output_width = 1024
-    output_height = 608
+    output_width = 1920
+    output_height = 1080
     output_bitrate = 2000000  # Nice for h264@1024x576: 4000000
 
     if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
@@ -644,6 +642,9 @@ def main(
     streammux.set_property("batch-size", 1)
     streammux.set_property("batched-push-timeout", 4000000)
 
+    # Adding this element after muxer will cause detections to get delayed
+    # videorate = make_elm_or_print_err("videorate", "Vide-rate", "Video Rate")
+
     # Inference element: object detection using TRT engine
     pgie = make_elm_or_print_err("nvinfer", "primary-inference", "pgie")
     pgie.set_property("config-file-path", CONFIG_FILE)
@@ -688,28 +689,28 @@ def main(
         encoder = make_elm_or_print_err(
             "nvv4l2h264enc", "encoder", "Encoder", preload_reminder
         )
+        encoder.set_property("preset-level", 1)
+        encoder.set_property("bufapi-version", 1)
         rtppay = make_elm_or_print_err("rtph264pay", "rtppay", "RTP H264 Payload")
     else:  # Default: H265 (recommended)
         print("Creating H265 stream")
         encoder = make_elm_or_print_err(
             "nvv4l2h265enc", "encoder", "Encoder", preload_reminder
         )
+        encoder.set_property("preset-level", 1)
+        encoder.set_property("bufapi-version", 1)
         rtppay = make_elm_or_print_err("rtph265pay", "rtppay", "RTP H265 Payload")
 
-    encoder.set_property("bitrate", output_bitrate)
-    # Taken from test1_rtsp_out python sample app
-    # Works without this, and it's not documented, keep an eye on this
     encoder.set_property("insert-sps-pps", 1)
-    encoder.set_property("preset-level", 1)
-    encoder.set_property("bufapi-version", 1)
+    encoder.set_property("bitrate", output_bitrate)
 
     # UDP streaming
     queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
     udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
     udpsink.set_property("host", "224.224.255.255")
     udpsink.set_property("port", udp_port)
-    # udpsink.set_property("async", False)
-    # udpsink.set_property("sync", False)
+    udpsink.set_property("async", False)
+    udpsink.set_property("sync", True)
 
     # Add elements to the pipeline
     if camera_input:
@@ -780,8 +781,9 @@ def main(
     bus = pipeline.get_bus()
 
     if e_external_interrupt is None:
-        e_interrupt = mp.Event()
-        # Custom interrupt handler, must be done after GLib MainLoop
+        # Use threading instead of mp.Event() for sigint_handler, see:
+        # https://bugs.python.org/issue41606
+        e_interrupt = threading.Event()
         signal.signal(signal.SIGINT, sigint_handler)
         print("[green bold]Press Ctrl+C to stop pipeline[/green bold]")
     else:
@@ -791,68 +793,66 @@ def main(
     # start play back and listen to events
     pipeline.set_state(Gst.State.PLAYING)
 
-    if e_ready is not None:
-        e_ready.set()
+    # After setting pipeline to PLAYING, stop it even on exceptions
+    try:
+        time_start_playing = time.time()
 
-    time_start_playing = time.time()
+        if mqtt_client is not None:
+            cb_args = mqtt_send_period
+            GLib.timeout_add_seconds(mqtt_send_period, cb_send_statistics, cb_args)
 
-    if mqtt_client is not None:
-        cb_args = mqtt_send_period
-        GLib.timeout_add_seconds(mqtt_send_period, cb_send_statistics, cb_args)
+        # Custom event loop
+        while not e_interrupt.is_set():
 
-    # Custom event loop
-    running = True
-    while running:
+            g_context.iteration(may_block=False)
+            message = bus.pop()
+            if message is not None:
+                t = message.type
 
-        g_context.iteration(may_block=False)
-        message = bus.pop()
-        if message is not None:
-            t = message.type
+                if t == Gst.MessageType.EOS:
+                    print("End-of-stream\n")
+                    e_interrupt.set()
+                elif t == Gst.MessageType.WARNING:
+                    err, debug = message.parse_warning()
+                    console.log(f"[yellow]WARNING[/yellow] {err}: {debug}\n")
+                elif t == Gst.MessageType.ERROR:
+                    err, debug = message.parse_error()
+                    console.log(f"[red]ERROR [/red] {err}: {debug}\n")
+                    e_interrupt.set()
+                else:
+                    # 100ms pause if no messages, only affects termination
+                    time.sleep(100e-3)
 
-            if t == Gst.MessageType.EOS:
-                print("End-of-stream\n")
-                running = False
-            elif t == Gst.MessageType.WARNING:
-                err, debug = message.parse_warning()
-                console.log(f"[yellow]WARNING[/yellow] {err}: {debug}\n")
-            elif t == Gst.MessageType.ERROR:
-                err, debug = message.parse_error()
-                console.log(f"[red]ERROR [/red] {err}: {debug}\n")
-                running = False
-            else:
-                # 100ms pause if no messages, only affects termination
-                time.sleep(100e-3)
-        if e_interrupt.is_set():
-            print("\n[yellow]Interruption signal received. Terminating[/yellow]")
-            running = False
+        end_time = time.time()
+        print("Inference main loop ending.")
+        pipeline.set_state(Gst.State.NULL)
 
-    end_time = time.time()
-    print("Finished processing")
-    pipeline.set_state(Gst.State.NULL)
-
-    # Profiling display
-    if start_time is not None and end_time is not None:
-        total_time = end_time - start_time
-        total_frames = (
-            total_frames - 1
-        )  # Remove first frame as its inference is not counted
-        inference_frames = total_frames // (inference_interval + 1)
-        print(f"\n[bold yellow] ---- Profiling ---- [/bold yellow]")
-        print(
-            f"Inference frames: {inference_frames} | Processed frames: {total_frames}"
-        )
-        print(
-            f"Time from time_start_playing: {end_time - time_start_playing:.2f} seconds"
-        )
-        print(f"Total time skipping first inference: {total_time:.2f} seconds")
-        print(f"Avg. time/frame: {total_time/total_frames:.4f} secs")
-        print(
-            f"[bold yellow]FPS: {total_frames/total_time:.1f} frames/second[/bold yellow]\n"
-        )
-        if inference_interval != 0:
+        # Profiling display
+        if start_time is not None and end_time is not None:
+            total_time = end_time - start_time
+            total_frames = (
+                total_frames - 1
+            )  # Remove first frame as its inference is not counted
+            inference_frames = total_frames // (inference_interval + 1)
+            print(f"\n[bold yellow] ---- Profiling ---- [/bold yellow]")
             print(
-                f"[red]WARNING:[/red] skipping inference every interval={inference_interval} frames"
+                f"Inference frames: {inference_frames} | Processed frames: {total_frames}"
             )
+            print(
+                f"Time from time_start_playing: {end_time - time_start_playing:.2f} seconds"
+            )
+            print(f"Total time skipping first inference: {total_time:.2f} seconds")
+            print(f"Avg. time/frame: {total_time/total_frames:.4f} secs")
+            print(
+                f"[bold yellow]FPS: {total_frames/total_time:.1f} frames/second[/bold yellow]\n"
+            )
+            if inference_interval != 0:
+                print(
+                    f"[red]WARNING:[/red] skipping inference every interval={inference_interval} frames"
+                )
+    except:
+        console.print_exception()
+        pipeline.set_state(Gst.State.NULL)
 
 
 if __name__ == "__main__":
