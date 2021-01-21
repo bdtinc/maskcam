@@ -23,16 +23,16 @@ sudo rm -rf /usr/share/example-content/Ubuntu_Free_Culture_Showcase/
 sudo rm -rf /usr/share/backgrounds
 ```
 
-This is necessary to free up about 400MB of storage space on the Nano. If this step is skipped, the Nano will be unable to boot after installing CUDA and Deepstream in Step 3, due to its storage space being completely full.
+This frees up about 450MB of storage space on the Nano, which is needed for installing CUDA and Deepstream. If this step is skipped, installing CUDA and Deepstream will cause the Nano's storage disk to be completely full, and the Nano will be unable to boot.
 
 ### 3. Install CUDA, Deepstream, and other JetPack components using SDK Manager
-Plug an ethernet cable into both the host PC and the Photon Nano. Open SDK Manager on the host PC. Select Jetson Nano (not the developer kit version) from the hardware target dropdown menu, then click "CONTINUE". De-select the Jetson OS box and select the SDK Components box, as shown in the image below. Click "FLASH".
+Plug an Ethernet cable into both the host PC and the Photon Nano. Open SDK Manager on the host PC. Select Jetson Nano (not the developer kit version) from the hardware target dropdown menu, then click "CONTINUE". De-select the Jetson OS box and select the SDK Components box, as shown in the image below. Click "FLASH".
 
 *Insert image here :)*
 
 A window will open asking to enter the IP address, username, and password for the Photon Nano. You can check the Nano's IP address by opening a terminal on the Photon Nano and issuing `ifconfig`. (The default IP address is 192.168.1.119.) Enter the IP address, username, and password, then click "Flash". This will install the selected SDK Components over an SSH connection. The process takes about 30 minutes. Reboot the Photon Nano after it's finished.
 
-This leaves the Nano with very little storage space left. Free up more storage space by removing samples directories for Deepstream, CUDA, and other packages. On the Photon Nano, issue:
+This leaves the Nano with very little storage space left. Free up more storage space by removing samples directories for Deepstream, CUDA, and other packages. On the Photon Nano, open a terminal and issue:
 
 ```
 sudo rm -rf /opt/nvidia/deepstream/deepstream-5.0/samples
@@ -57,11 +57,9 @@ sudo apt get python3-pip
 ### 5. Mount SD card-based drive
 There still isn't quite enough storage space to set up MaskCam on the Nano's 16GB eMMC chip. Insert a blank SD card (at least 8GB) into the SD card slot on the Photon carrier board. Use Ubuntu's Disks application to format the card as EXT4 and mount it as a storage device.  This SD card will be used to hold the MaskCam program files, as well as all Python libraries that are needed for MaskCam.
 
-(Note: A USB flash drive is not used because there is only one USB hub on the Photon Carrier board. If other devices are plugged and unplugged from this USB hub while the mounted USB flash drive is plugged in, it will be unmounted and stop working.)
+(Note: A USB flash drive is not used because there is only one USB hub on the Photon Carrier board. If other devices are plugged and unplugged from this USB hub while the USB flash drive is plugged in, it will be unmounted and stop working.)
 
-Take note of the mount location for the drive. For example, I named my SD card partition "MaskCam-SD". The path to the mounted device is /media/evan/MaskCam-SD. I will refer to location for the rest of the setup instructions.
-
-
+Take note of the mount location for the new drive. For example, I named my SD card partition "MaskCam-SD". The path to the mounted device is /media/evan/MaskCam-SD. I will refer to this location for the rest of the setup instructions.
 
 ### 6.  Create symlink to Python site-packages directory and install Python libraries
 Since there is limited storage space on the Nano, the Python libraries need to be installed on the SD card. First, install a dummy Python library (imutils) using:
