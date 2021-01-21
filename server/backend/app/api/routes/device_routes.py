@@ -7,8 +7,9 @@ from app.db.cruds import (
     get_device,
     get_devices,
     update_device,
+    get_files_by_device
 )
-from app.db.schema import DeviceSchema, get_db_generator
+from app.db.schema import DeviceSchema, VideoFileSchema, get_db_generator
 from fastapi import APIRouter, Depends
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import DataError, IntegrityError
@@ -136,3 +137,21 @@ def delete_device_item(
         raise NoItemFoundException()
     except DataError as e:
         raise GenericException(e)
+
+
+@device_router.get("/files/{device_id}", response_model=List[VideoFileSchema])
+def get_device_files(
+    device_id: str,
+    db: Session = Depends(get_db_generator),
+):
+    """
+    Get existing video files in device.
+
+    Arguments:
+        device_id {str} -- Device id.
+        db {Session} -- Database session.
+
+    Returns:
+        List[VideoFileSchema] -- VideoFile instances which device_id matches
+    """
+    return get_files_by_device(db_session=db, device_id=device_id)

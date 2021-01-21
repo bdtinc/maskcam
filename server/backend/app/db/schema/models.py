@@ -20,9 +20,20 @@ class StatisticsModel(Base):
     people_total = Column(Integer, nullable=False)
 
 
+class VideoFilesModel(Base):
+    __tablename__ = "video_file"
+    device_id = Column(
+        String,
+        ForeignKey("device.id"),
+        primary_key=True,
+    )
+    video_name = Column(String, primary_key=True)
+ 
+
 class DeviceModel(Base):
     __tablename__ = "device"
 
     id = Column(String, primary_key=True)
     description = Column(String)
     statistics = relationship("StatisticsModel", cascade="all, delete")
+    video_files = relationship("VideoFilesModel", cascade="all, delete")

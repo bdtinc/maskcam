@@ -13,3 +13,7 @@ from .crud_statistic import (
     get_statistics_from_to,
     update_statistic,
 )
+from .crud_video_file import (
+    update_files,
+    get_files_by_device,
+)

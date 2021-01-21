@@ -24,3 +24,11 @@ class DeviceSchema(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class VideoFileSchema(BaseModel):
+    device_id: str
+    video_name: str
+
+    class Config:
+        orm_mode = True
