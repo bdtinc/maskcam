@@ -46,3 +46,17 @@ def get_statistics_from_to(device_id, datetime_from, datetime_to):
     )
 
     return json.loads(response.content) if response.ok else None
+
+def get_device_files(device_id):
+    """
+    Get files from a specific device
+
+    Arguments:
+        device_id {str} -- Device id.
+    """
+    response = requests.get(
+        f"http://{SERVER_URL}/files/{device_id}"
+    )
+
+    return json.loads(response.content) if response.ok else None
+

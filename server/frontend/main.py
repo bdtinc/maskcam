@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from session_manager import get_state
-from utils.api_utils import get_device, get_devices, get_statistics_from_to
+from utils.api_utils import get_device, get_devices, get_statistics_from_to, get_device_files
 from utils.format_utils import create_chart, format_data
 
 
@@ -109,6 +109,13 @@ def display_device(state):
                     st.write(
                         "The selected device has no alerts to show for the given filters."
                     )
+        device_files = get_device_files(device_id=selected_device)
+        st.subheader("Saved video files on device")
+        if not device_files:
+            st.write("The selected device has no saved files yet")
+        else:
+            for file_instance in device_files:
+                st.write(file_instance["video_name"])
 
 
 def main():
@@ -122,10 +129,10 @@ def main():
     if state.selected_device is None:
         st.write("Please select a device.")
     else:
-        display_device(state)
         if st.button("Refresh"):
             # Force frontend to refresh
             pass
+        display_device(state)
 
     state.sync()
 
