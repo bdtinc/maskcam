@@ -26,9 +26,11 @@ sudo rm -rf /usr/share/backgrounds
 This frees up about 450MB of storage space on the Nano, which is needed for installing CUDA and Deepstream. If this step is skipped, installing CUDA and Deepstream will cause the Nano's storage disk to be completely full, and the Nano will be unable to boot.
 
 ### 3. Install CUDA, Deepstream, and other JetPack components using SDK Manager
-Plug an Ethernet cable into both the host PC and the Photon Nano. Open SDK Manager on the host PC. Select Jetson Nano (not the developer kit version) from the hardware target dropdown menu, then click "CONTINUE". De-select the Jetson OS box and select the SDK Components box, as shown in the image below. Click "FLASH".
+Plug an Ethernet cable into both the host PC and the Photon Nano. Open SDK Manager on the host PC. Select Jetson Nano (not the developer kit version) from the hardware target dropdown menu, then click "CONTINUE". De-select the Jetson OS box and select the SDK Components box, as shown in the image below. Click "CONTINUE".
 
-*Insert image here :)*
+<p align="center">
+  <img src="https://connecttech.com/wp-content/uploads/2019/09/sdk_components_agx_4.2.1_step2_edited-1024x640.png">
+</p>
 
 A window will open asking to enter the IP address, username, and password for the Photon Nano. You can check the Nano's IP address by opening a terminal on the Photon Nano and issuing `ifconfig`. (The default IP address is 192.168.1.119.) Enter the IP address, username, and password, then click "Flash". This will install the selected SDK Components over an SSH connection. The process takes about 30 minutes. Reboot the Photon Nano after it's finished.
 
