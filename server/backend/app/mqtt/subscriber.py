@@ -1,7 +1,9 @@
 import json
 
-from app.core.config import MQTT_CLIENT_TOPICS, SUBSCRIBER_CLIENT_ID
-from app.db.cruds import create_device, create_statistic
+from app.core.config import SUBSCRIBER_CLIENT_ID, MQTT_HELLO_TOPIC,\
+                            MQTT_ALERT_TOPIC, MQTT_SEND_TOPIC,\
+                            MQTT_REPORT_TOPIC, MQTT_FILES_TOPIC
+from app.db.cruds import create_device, create_statistic, update_files
 from app.db.schema import get_db_session
 from app.db.utils import convert_timestamp_to_datetime, get_enum_type
 from broker import connect_mqtt_broker
@@ -9,6 +11,13 @@ from broker import connect_mqtt_broker
 from paho.mqtt import client as mqtt_client
 from sqlalchemy.exc import IntegrityError
 
+MQTT_CLIENT_TOPICS = [  # topic, QoS
+    (MQTT_HELLO_TOPIC, 2),
+    (MQTT_FILES_TOPIC, 2),
+    (MQTT_ALERT_TOPIC, 2),
+    (MQTT_REPORT_TOPIC, 2),
+    (MQTT_SEND_TOPIC, 2),
+]
 
 def subscribe(client: mqtt_client):
     """
@@ -42,7 +51,7 @@ def process_message(database_session, msg):
     topic = msg.topic
     if topic == "hello":
         # Register new Jetson device
-        device_id = message["id"]
+        device_id = message["device_id"]
 
         try:
             device_information = {
@@ -55,7 +64,7 @@ def process_message(database_session, msg):
             )
             print("Added device")
         except IntegrityError:
-            print(f"Error, a device with id={device_id} already exist")
+            print(f"A device with id={device_id} already exists")
 
     elif topic in ["alerts", "receive-from-jetson"]:
         try:
@@ -77,9 +86,18 @@ def process_message(database_session, msg):
             print(f"Added statistic")
         except IntegrityError:
             print(f"Error, the statistic already exist")
+    
+    elif topic == "video-files":
+        try:
+            print(f"Adding files for device_id: {message['device_id']}")
+            update_files(db_session=database_session, device_id=message["device_id"], file_list=message["file_list"])
+        except Exception as e:
+            import pdb; pdb.set_trace()
+            print(f"Exception trying to update files: {e}")
 
     elif topic == "send-to-jetson":
-        print(f"Send info")
+        # Just monitoring this channel, useful for debugging
+        print(f"Detected info sent to device_id: {message['device_id']}")
 
 
 def main():

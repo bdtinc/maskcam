@@ -15,13 +15,8 @@ MQTT_BROKER_PORT = int(os.environ["MQTT_BROKER_PORT"])
 SUBSCRIBER_CLIENT_ID = os.environ["SUBSCRIBER_CLIENT_ID"]
 
 # Topic configuration
-MQTT_HELLO_TOPIC = os.environ["MQTT_HELLO_TOPIC"]
-MQTT_ALERT_TOPIC = os.environ["MQTT_ALERT_TOPIC"]
-MQTT_REPORT_TOPIC = os.environ["MQTT_REPORT_TOPIC"]
-MQTT_SEND_TOPIC = os.environ["MQTT_SEND_TOPIC"]
-MQTT_CLIENT_TOPICS = [
-    (MQTT_HELLO_TOPIC, 2),
-    (MQTT_ALERT_TOPIC, 2),
-    (MQTT_REPORT_TOPIC, 2),
-    (MQTT_SEND_TOPIC, 2),
-]
+MQTT_HELLO_TOPIC = "hello"
+MQTT_ALERT_TOPIC = "alerts"
+MQTT_REPORT_TOPIC = "receive-from-jetson"
+MQTT_SEND_TOPIC = "send-to-jetson"
+MQTT_FILES_TOPIC = "video-files"

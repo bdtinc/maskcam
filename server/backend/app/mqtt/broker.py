@@ -1,4 +1,4 @@
-from app.core.config import MQTT_BROKER, MQTT_BROKER_PORT, MQTT_CLIENT_TOPICS
+from app.core.config import MQTT_BROKER, MQTT_BROKER_PORT
 from paho.mqtt import client as mqtt_client
 
 
@@ -19,7 +19,11 @@ def connect_mqtt_broker(client_id: str) -> mqtt_client:
         else:
             print(f"Failed to connect, return code {code}\n")
 
+    def on_disconnect(client, userdata, code):
+        print("MQTT Broker disconnected")
+
     client = mqtt_client.Client(client_id)
     client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
     client.connect(MQTT_BROKER, MQTT_BROKER_PORT)
     return client
