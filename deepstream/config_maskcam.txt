@@ -58,7 +58,7 @@
 # properties.
 
 [maskcam]
-default-input=camera:///dev/video0
+default-input=v4l2:///dev/video0
 
 # Run utils/gst_capabilities.sh and find some combination with framerate <= 14 fps
 camera-framerate=10/1
@@ -82,7 +82,8 @@ net-scale-factor=0.0039215697906911373
 #0=RGB, 1=BGR
 model-color-format=0
 
-model-engine-file=../yolo/facemask_y4tiny_1024_608_fp16.trt
+# model-engine-file=../yolo/facemask_y4tiny_1024_608_fp16.trt
+model-engine-file=../facemask_y4tiny_1024_608_fp16_new.trt
 labelfile-path=../yolo/data/obj.names
 custom-lib-path=plugin_yolov4/nvdsinfer_custom_impl_Yolo/libnvdsinfer_custom_impl_Yolo.so
 

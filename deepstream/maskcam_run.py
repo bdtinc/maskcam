@@ -9,7 +9,7 @@ from rich import print
 from rich.console import Console
 from datetime import datetime
 
-from common import CAMERA_PROTOCOL, CONFIG_FILE
+from common import CONFIG_FILE, USBCAM_PROTOCOL, RASPICAM_PROTOCOL
 from maskcam_inference import main as inference_main
 from maskcam_filesave import main as filesave_main
 from maskcam_streaming import main as streaming_main
@@ -61,12 +61,13 @@ if __name__ == "__main__":
         Examples:
         \t$ python3 maskcam_run.py
         \t$ python3 maskcam_run.py file:///absolute/path/to/file.mp4
-        \t$ python3 maskcam_run.py camera:///dev/video1
+        \t$ python3 maskcam_run.py v4l2:///dev/video1
+        \t$ python3 maskcam_run.py argus://0
 
         Notes:
         \t - If no URI is provided, will use default-input defined in config_maskcam.txt
         \t - If a file:///path/file.mp4 is provided, the output will be output_file.mp4 in the current dir
-        \t - If the input is a live camera:///dev/videoX, the output will be consecutive
+        \t - If the input is a live camera, the output will be consecutive
         \t   video files under /dev/shm/date_time.mp4
         \t   according to the time interval defined in output-chunks-duration in config_maskcam.txt.
         """
@@ -86,7 +87,9 @@ if __name__ == "__main__":
             print(f"Using input from config file: {input_filename}")
 
         # Output file name
-        is_live_input = CAMERA_PROTOCOL in input_filename
+        is_usbcamera = USBCAM_PROTOCOL in input_filename
+        is_raspicamera = RASPICAM_PROTOCOL in input_filename
+        is_live_input = is_usbcamera or is_raspicamera
         if is_live_input:
             output_dir = config["maskcam"]["default-output-dir"]
             output_filename = (

@@ -48,7 +48,7 @@ from gi.repository import GLib, Gst, GstRtspServer
 sys.path.append("../../norfair")
 sys.path.append("../../filterpy")
 from norfair.tracker import Tracker, Detection
-from common import CODEC_MP4, CODEC_H264, CODEC_H265, CAMERA_PROTOCOL, CONFIG_FILE
+from common import CODEC_MP4, CODEC_H264, CODEC_H265, USBCAM_PROTOCOL, RASPICAM_PROTOCOL, CONFIG_FILE
 
 
 # YOLO labels. See obj.names file
@@ -86,17 +86,20 @@ class FaceMask:
         self.th_detection = th_detection
         self.th_vote = th_vote
         self.min_face_size = min_face_size
+        self.disable_detection_validation = False
         self.min_votes = 5
         self.max_votes = 50
         self.color_mask = (0.0, 1.0, 0.0)  # green
         self.color_no_mask = (1.0, 0.0, 0.0)  # red
         self.color_unknown = (1.0, 1.0, 0.0)  # yellow
-        self.draw_raw_detections = False
+        self.draw_raw_detections = True
         self.draw_tracked_people = True
-        self.tracker_enabled = True
+        self.tracker_enabled = False
         self.stats_lock = threading.Lock()
 
     def validate_detection(self, box_points, score, label):
+        if self.disable_detection_validation:
+            return True
         box_width = box_points[1][0] - box_points[0][0]
         box_height = box_points[1][1] - box_points[0][1]
         return (
@@ -183,7 +186,7 @@ def keypoints_distance(detected_pose, tracked_pose):
     return mean_distance_normalized
 
 
-face_mask = FaceMask(0.3, 0.4, 32)
+face_mask = FaceMask(0.1, 0.4, 0)
 
 # In Norfair we trust
 tracker = Tracker(
@@ -384,30 +387,32 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
                 person for person in tracked_people if person.live_points.any()
             ]
 
-        if face_mask.draw_tracked_people:
-            for n_person, person in enumerate(drawn_people):
-                points = person.estimate
-                box_points = points.clip(0).astype(int)
+            if face_mask.draw_tracked_people:
+                for n_person, person in enumerate(drawn_people):
+                    points = person.estimate
+                    box_points = points.clip(0).astype(int)
 
-                # Update mask votes
-                face_mask.add_detection(
-                    person.id,
-                    person.last_detection.data["label"],
-                    person.last_detection.data["p"],
-                )
-                label, color = face_mask.get_person_label(person.id)
+                    # Update mask votes
+                    face_mask.add_detection(
+                        person.id,
+                        person.last_detection.data["label"],
+                        person.last_detection.data["p"],
+                    )
+                    label, color = face_mask.get_person_label(person.id)
 
-                # Index of this person's drawing in the current meta
-                n_draw = n_person % max_drawings_per_meta
+                    # Index of this person's drawing in the current meta
+                    n_draw = n_person % max_drawings_per_meta
 
-                if n_draw == 0:  # Initialize meta
-                    # Acquiring a display meta object. The memory ownership remains in
-                    # the C code so downstream plugins can still access it. Otherwise
-                    # the garbage collector will claim it when this probe function exits.
-                    display_meta = pyds.nvds_acquire_display_meta_from_pool(batch_meta)
-                    pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
+                    if n_draw == 0:  # Initialize meta
+                        # Acquiring a display meta object. The memory ownership remains in
+                        # the C code so downstream plugins can still access it. Otherwise
+                        # the garbage collector will claim it when this probe function exits.
+                        display_meta = pyds.nvds_acquire_display_meta_from_pool(
+                            batch_meta
+                        )
+                        pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
 
-                draw_detection(display_meta, n_draw, box_points, label, color)
+                    draw_detection(display_meta, n_draw, box_points, label, color)
 
         # Raw detections
         if face_mask.draw_raw_detections:
@@ -583,9 +588,9 @@ def main(
     camera_capabilities = f"video/x-raw, framerate={camera_framerate}"
 
     # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
-    output_width = 1920
-    output_height = 1080
-    output_bitrate = 2000000  # Nice for h264@1024x576: 4000000
+    output_width = 1024
+    output_height = 576
+    output_bitrate = 6000000  # Nice for h264@1024x576: 4000000
 
     if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
         print(
@@ -613,17 +618,25 @@ def main(
     if not pipeline:
         sys.stderr.write(" Unable to create Pipeline \n")
 
-    camera_input = CAMERA_PROTOCOL in input_filename
+    # Two types of camera supported: USB or Raspi
+    usbcam_input = USBCAM_PROTOCOL in input_filename
+    raspicam_input = RASPICAM_PROTOCOL in input_filename
+    camera_input = usbcam_input or raspicam_input
     if camera_input:
-        input_device = input_filename[len(CAMERA_PROTOCOL) :]
-        source = make_elm_or_print_err("v4l2src", "v4l2-camera-source", "Camera input")
-        source.set_property("device", input_device)
+        if usbcam_input:
+            input_device = input_filename[len(USBCAM_PROTOCOL) :]
+            source = make_elm_or_print_err("v4l2src", "v4l2-camera-source", "Camera input")
+            source.set_property("device", input_device)
+        elif raspicam_input:
+            input_device = input_filename[len(RASPICAM_PROTOCOL) :]
+            source = make_elm_or_print_err("nvarguscamerasrc", "nv-argus-camera-source", "RaspiCam input")
+            source.set_property("sensor-id", input_device)
 
         # Misterious converting sequence from deepstream_test_1_usb.py
-        caps_v4l2src = make_elm_or_print_err(
-            "capsfilter", "v4l2src_caps", "v4lsrc caps filter"
+        caps_camera = make_elm_or_print_err(
+            "capsfilter", "camera_src_caps", "Camera caps filter"
         )
-        caps_v4l2src.set_property(
+        caps_camera.set_property(
             "caps",
             Gst.Caps.from_string(camera_capabilities),
         )
@@ -737,7 +750,7 @@ def main(
     # Add elements to the pipeline
     if camera_input:
         pipeline.add(source)
-        pipeline.add(caps_v4l2src)
+        pipeline.add(caps_camera)
         pipeline.add(vidconvsrc)
         pipeline.add(nvvidconvsrc)
         pipeline.add(caps_vidconvsrc)
@@ -771,8 +784,8 @@ def main(
 
     # Pipeline Links
     if camera_input:
-        source.link(caps_v4l2src)
-        caps_v4l2src.link(vidconvsrc)
+        source.link(caps_camera)
+        caps_camera.link(vidconvsrc)
         vidconvsrc.link(nvvidconvsrc)
         nvvidconvsrc.link(caps_vidconvsrc)
         srcpad = caps_vidconvsrc.get_static_pad("src")
