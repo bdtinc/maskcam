@@ -79,10 +79,10 @@ Now, all user Python libraries that are added with the `pip3` command will be in
 
 Install the Python libraries required for MaskCam using:
 ```
-pip3 install black flake8 ipython ipdb Cython numpy scipy PyYAML rich paho-mqtt
+pip3 install black flake8 ipython ipdb Cython scikit-learn numpy scipy PyYAML rich paho-mqtt
 ```
 
-There may be errors from installing scipy, but these can be ignored.
+Installing the libraries takes around 20 minutes. There may be errors from installing scipy, but these can be ignored.
 
 ### 7. Set up MaskCam directory
 On the Photon Nano, create a MaskCam folder inside the mounted SD card and cd into it.
@@ -105,7 +105,55 @@ Add filterpy and norfair to PYTHONPATH using:
 export PYTHONPATH=/media/evan/MaskCam-SD/MaskCam/filterpy:/media/evan/MaskCam-SD/MaskCam/norfair
 ```
 
-### 8. Install GStreamer Python bindings
+### 8. Install GStreamer and Deepstream Python bindings
+Most of the GStreamer packages are pre-installed on this image, so there are just one or two other packages to be installed. Install the GStreamer RTSP library and then reinstall the V4L2 GStreamer plugin using:
+```
+sudo apt install gir1.2-gst-rtsp-server-1.0
+sudo apt install --reinstall nvidia-l4t-gstreamer
+```
 
+Install the GStreamer Python bindings by using the following series of commands:
+```
+sudo apt-get install python-gi-dev
+export GST_LIBS="-lgstreamer-1.0 -lgobject-2.0 -lglib-2.0"
+export GST_CFLAGS="-pthread -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include"
+git clone https://github.com/GStreamer/gst-python.git
+cd gst-python
+git checkout 1a8f48a
+./autogen.sh PYTHON=python3
+./configure PYTHON=python3
+make
+sudo make install
+```
 
+Install the Deepstream Python bindings using these two commands:
+```
+cd /opt/nvidia/deepstream/deepstream-5.0/lib
+sudo python3 setup.py install
+```
 
+### 9. Compile YOLO v4 plugin for Deepstream
+Move into the MaskCam folder and build the YOLO v4 Deepstream plugin using:
+```
+cd /media/evan/MaskCam-SD/MaskCam/bdti-jetson/deepstream/plugin_yolov4/nvdsinfer_custom_impl_Yolo
+export CUDA_VER=10.2
+make
+```
+
+If the make command completes successfully, a libnvdsinfer_custom_impl_Yolo.so file will be added to the folder.
+
+### 10. Run MaskCam!!
+We're ready to run the MaskCam program! First, make sure to plug in a USB camera. Move to the MaskCam directory and run it using:
+```
+cd /media/evan/MaskCam-SD/MaskCam/bdti-jetson/deepstream
+python3 maskcam_inference.py &
+````
+python3 maskcam_filesave.py
+```
+
+The program will initialize for several seconds. It will then access the webcam, process about 15 seconds of video, save it to a file in /dev/sh, and close the webcam. The maskcam_inference.py program continues running, so kill it using:
+```
+kill %1
+```
+
+That's it! MaskCam is all set up on the Photon Nano.
