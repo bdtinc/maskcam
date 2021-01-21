@@ -84,7 +84,7 @@ Install the Python libraries required for MaskCam using:
 pip3 install black flake8 ipython ipdb Cython scikit-learn numpy scipy PyYAML rich paho-mqtt
 ```
 
-Installing the libraries takes around 20 minutes. There may be errors from installing scipy, but these can be ignored.
+Installing the libraries takes around 30 minutes. There may be errors from installing scipy, but these can be ignored.
 
 ### 7. Set up MaskCam directory
 On the Photon Nano, create a MaskCam folder inside the mounted SD card and cd into it.
@@ -108,7 +108,7 @@ export PYTHONPATH=/media/evan/MaskCam-SD/MaskCam/filterpy:/media/evan/MaskCam-SD
 ```
 
 ### 8. Install GStreamer and Deepstream Python bindings
-Most of the GStreamer packages are pre-installed on this image, so there are just one or two other packages to be installed. Install the GStreamer RTSP library and then reinstall the V4L2 GStreamer plugin using:
+Most of the GStreamer packages are pre-installed on this image, but there are a couple other packages to be installed. Install the GStreamer RTSP library and then reinstall the V4L2 GStreamer plugin using:
 ```
 sudo apt install gir1.2-gst-rtsp-server-1.0
 sudo apt install --reinstall nvidia-l4t-gstreamer
@@ -149,7 +149,6 @@ We're ready to run the MaskCam program! First, make sure to plug in a USB camera
 ```
 cd /media/evan/MaskCam-SD/MaskCam/bdti-jetson/deepstream
 python3 maskcam_inference.py &
-````
 python3 maskcam_filesave.py
 ```
 
