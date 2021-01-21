@@ -39,31 +39,7 @@ sudo rm -rf ~/VisionWorks-SFM-0.90-Samples
 
 ```
 
-### 4. Mount SD Card-based drive
-There still isn't quite enough storage space to set up MaskCam on the Nano's 16GB eMMC chip. Insert an
-
-### 4. Set up MaskCam directory
-On the Photon Nano, create a MaskCam folder inside the home directory (/home/<username>) and cd into it using
-
-```
-mkdir ~/MaskCam
-cd ~/MaskCam
-```
-
-Clone this repository, the [norfair repository](https://github.com/tryolabs/norfair), and the [filterpy](https://github.com/rlabbe/filterpy) repository from GitHub using the following commands. To clone these repositories, SSH keys will need to be set up on the Photon Nano (see [these instructions](https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh)).
-
-```
-git clone git@github.com:tryolabs/bdti-jetson.git
-git clone git@github.com:tryolabs/norfair.git
-git clone git@github.com:rlabbe/filterpy.git
-```
-
-Remove the data directory from the bdti-jetson repository using
-```
-rm -rf ~/MaskCam/bdti-jetson/yolo/data
-```
-
-### 5. Update NVIDIA apt sources list
+### 4. Update NVIDIA apt sources list and install pip3
 Open the NVIDIA apt sources list using `sudo gedit /etc/apt/sources.list.d/nvidia-l4t-apt-source.list` . Remove the "#" in front of each line so it looks like this:
 
 ```
@@ -71,10 +47,65 @@ deb https://repo.download.nvidia.com/jetson/common r32.4 main
 deb https://repo.download.nvidia.com/jetson/<platform> r32.4 main
 ```
 
-Save and exit the file. Then, issue `sudo apt update` to update the package list.
+Save and exit the file. Then, issue `sudo apt update` to update the package list. Install pip3 using:
+```
+sudo apt get python3-pip
+```
 
-### 6. Install Python libraries
-First, install pip3 using `sudo apt install python3-pip`. Then, install the required Python packages using:
+### 5. Mount SD card-based drive
+There still isn't quite enough storage space to set up MaskCam on the Nano's 16GB eMMC chip. Insert a blank SD card (at least 8GB) into the SD card slot on the Photon carrier board. Use Ubuntu's Disks application to format the card as EXT4 and mount it as a storage device.  This SD card will be used to hold the MaskCam program files, as well as all Python libraries that are needed for MaskCam.
+
+(Note: A USB flash drive is not used because there is only one USB hub on the Photon Carrier board. If other devices are plugged and unplugged from this USB hub while the mounted USB flash drive is plugged in, it will be unmounted and stop working.)
+
+Take note of the mount location for the drive. For example, I named my SD card partition "MaskCam-SD". The path to the mounted device is /media/evan/MaskCam-SD. I will refer to location for the rest of the setup instructions.
+
+
+
+### 6.  Create symlink to Python site-packages directory and install Python libraries
+Since there is limited storage space on the Nano, the Python libraries need to be installed on the SD card. First, install a dummy Python library (imutils) using:
+
 ```
-pip3 install black flake8 ipython ipdb Cython numpy scipy
+pip3 install imutils
 ```
+
+This creates a local site-packages folder at /home/*username*/.local/lib/python3.6/site-packages. Move the folder to the SD card and create a symbolic link to it using:
+
+```
+mv ~/.local/lib/python3.6/site-packages /media/evan/MaskCam-SD/site-packages-local
+ln -s /media/evan/MaskCam-SD/site-packages-local ~/.local/lib/python3.6/site-packages
+```
+
+Now, all user Python libraries that are added with the `pip3` command will be installed to the site-packages-local folder on the SD card.
+
+Install the Python libraries required for MaskCam using:
+```
+pip3 install black flake8 ipython ipdb Cython numpy scipy PyYAML rich paho-mqtt
+```
+
+There may be errors from installing scipy, but these can be ignored.
+
+### 7. Set up MaskCam directory
+On the Photon Nano, create a MaskCam folder inside the mounted SD card and cd into it.
+
+```
+mkdir /media/evan/MaskCam-SD
+cd /media/evan/MaskCam-SD/MaskCam
+```
+
+Clone this bdti-jetson repository, the [norfair repository](https://github.com/tryolabs/norfair), and the [filterpy](https://github.com/rlabbe/filterpy) repository from GitHub using the following commands. To clone these repositories, SSH keys will need to be set up on the Photon Nano (see [these instructions](https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh)).
+
+```
+git clone git@github.com:tryolabs/bdti-jetson.git
+git clone git@github.com:tryolabs/norfair.git
+git clone git@github.com:rlabbe/filterpy.git
+```
+
+Add filterpy and norfair to PYTHONPATH using:
+```
+export PYTHONPATH=/media/evan/MaskCam-SD/MaskCam/filterpy:/media/evan/MaskCam-SD/MaskCam/norfair
+```
+
+### 8. Install GStreamer Python bindings
+
+
+
