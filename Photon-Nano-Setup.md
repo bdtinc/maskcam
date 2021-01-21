@@ -81,10 +81,10 @@ Now, all user Python libraries that are added with the `pip3` command will be in
 
 Install the Python libraries required for MaskCam using:
 ```
-pip3 install black flake8 ipython ipdb Cython scikit-learn numpy scipy PyYAML rich paho-mqtt
+pip3 install pip-tools black flake8 jupyter ipython ipdb Cython scikit-learn numpy scipy PyYAML rich paho-mqtt
 ```
 
-Installing the libraries takes around 30 minutes. There may be errors from installing scipy, but these can be ignored.
+Installing the libraries takes around 30 minutes. There may be errors from installing jupyter, scikit-learn, and scipy, but these can be ignored.
 
 ### 7. Set up MaskCam directory
 On the Photon Nano, create a MaskCam folder inside the mounted SD card and cd into it.
@@ -149,10 +149,14 @@ We're ready to run the MaskCam program! First, make sure to plug in a USB camera
 ```
 cd /media/evan/MaskCam-SD/MaskCam/bdti-jetson/deepstream
 python3 maskcam_inference.py &
+```
+After the program has initialized and started printing "Processed XX frames...", run the video recording program using: 
+
+```
 python3 maskcam_filesave.py
 ```
 
-The program will initialize for several seconds. It will then access the webcam, process about 15 seconds of video, save it to a file in /dev/sh, and close the webcam. The maskcam_inference.py program continues running, so kill it using:
+The program will access the webcam, process about 15 seconds of video, save it to a file in /dev/sh, and close the webcam. The maskcam_inference.py program continues running, so kill it using:
 ```
 kill %1
 ```
