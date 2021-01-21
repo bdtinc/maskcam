@@ -8,6 +8,8 @@ The following software versions are used for this setup:
 * CUDA 10.2
 * Deepstream 5.0
 
+Portions of these instructions are referenced from NVIDIA's [Deepstream Quickstart instructions](https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_Quickstart.html#jetson-setup) and [Python Sample Apps](https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_Python_Sample_Apps.html#python-bindings).
+
 ### 1. Flash Jetson OS onto Nano SOM
 Install the Jetson Nano SOM into the Photon carrier board. Follow [Connect Tech's instructions](https://connecttech.com/resource-center/kdb373/) to build a Jetson OS image on a host PC, install the Connect Tech Photon BSP on it, and flash it onto the Nano SOM over USB.
 
