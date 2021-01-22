@@ -684,7 +684,7 @@ def main(
     # UDP streaming
     queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
     udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
-    udpsink.set_property("host", "224.224.255.255")
+    udpsink.set_property("host", "127.0.0.1")
     udpsink.set_property("port", udp_port)
     udpsink.set_property("async", False)
     udpsink.set_property("sync", True)

@@ -35,6 +35,7 @@ from rich import print
 gi.require_version("Gst", "1.0")
 gi.require_version("GstRtspServer", "1.0")
 from gi.repository import GLib, Gst, GstRtspServer
+from utils import get_ip_address
 from common import CODEC_MP4, CODEC_H264, CODEC_H265, CONFIG_FILE
 
 
@@ -71,7 +72,7 @@ def main(args):
     server.get_mount_points().add_factory(rtsp_streaming_address, factory)
 
     print(
-        f"\n\n[green bold]Streaming[/green bold] at rtsp://localhost:{rtsp_streaming_port}{rtsp_streaming_address}\n\n"
+        f"\n\n[green bold]Streaming[/green bold] at rtsp://{get_ip_address()}:{rtsp_streaming_port}{rtsp_streaming_address}\n\n"
     )
 
     # GLib loop required for RTSP server
