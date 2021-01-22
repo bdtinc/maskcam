@@ -1,6 +1,8 @@
+import os
 import sys
 import signal
 import time
+import json
 import threading
 import multiprocessing as mp
 import configparser
@@ -8,6 +10,7 @@ import configparser
 from rich import print
 from rich.console import Console
 from datetime import datetime
+from paho.mqtt import client as paho_mqtt_client
 
 from common import CONFIG_FILE, USBCAM_PROTOCOL, RASPICAM_PROTOCOL
 from maskcam_inference import main as inference_main
@@ -15,11 +18,25 @@ from maskcam_filesave import main as filesave_main
 from maskcam_streaming import main as streaming_main
 
 
+# MQTT topics
+MQTT_TOPIC_HELLO = "hello"
+MQTT_TOPIC_STATS = "receive-from-jetson"
+MQTT_TOPIC_ALERTS = "alerts"
+MQTT_TOPIC_FILES = "video-files"
+
+# Must come defined as environment var or MQTT gets disabled
+MQTT_BROKER_IP = os.environ.get("MQTT_BROKER_IP", None)
+MQTT_DEVICE_NAME = os.environ.get("MQTT_DEVICE_NAME", None)
+MQTT_DEVICE_DESCRIPTION = "MaskCam @ Jetson Nano"
+
+
 # mp.set_start_method("spawn")
 
 # Use threading instead of mp.Event() for sigint_handler, see:
 # https://bugs.python.org/issue41606
 e_interrupt = threading.Event()
+
+mqtt_msg_queue = mp.Queue(maxsize=100)  # 100 mqtt messages stored max
 
 
 def sigint_handler(sig, frame):
@@ -52,6 +69,92 @@ def terminate_process(name, process, e_interrupt_process):
         print(f"[red]Forcing termination of process:[/red] [bold]{name}[/bold]")
         process.terminate()
     print(f"Process terminated: [yellow]{name}[/yellow]\n")
+
+
+def mqtt_send_queue(mqtt_client):
+    success = True
+    while not mqtt_msg_queue.empty() and success:
+        q_msg = mqtt_msg_queue.get_nowait()
+        print(f"Sending enqueued message to topic: {q_msg['topic']}")
+        success = mqtt_send_msg(mqtt_client, q_msg["topic"], q_msg["message"])
+    return success
+
+
+def mqtt_on_connect(client, userdata, flags, code):
+    if code == 0:
+        print("[green]Connected to MQTT Broker[/green]")
+        success = mqtt_say_hello(client)
+        success = success and mqtt_send_file_list(client)
+        success = success and mqtt_send_queue(client)
+        if not success:
+            print(f"[red]Failed to send MQTT message after connecting[/red]")
+    else:
+        print(f"[red]Failed to connect to MQTT[/red], return code {code}\n")
+
+
+def mqtt_connect_broker(
+    client_id: str, broker_ip: str, broker_port: int
+) -> paho_mqtt_client:
+    client = paho_mqtt_client.Client(client_id)
+    client.on_connect = mqtt_on_connect
+    client.connect(broker_ip, broker_port)
+    return client
+
+
+def mqtt_send_msg(mqtt_client, topic, message, enqueue=True):
+    if mqtt_client is None:
+        print(f"Skipping MQTT message to topic: {topic}")
+        return False
+
+    # Check previous enqueued msgs
+    mqtt_send_queue(mqtt_client)
+
+    result = mqtt_client.publish(topic, json.dumps(message))
+    if result[0] == 0:
+        console.log(f"{topic} | MQTT message [green]SENT[/green]")
+        print(message)
+        return True
+    else:
+        if enqueue:
+            if not mqtt_msg_queue.full():
+                console.log(f"{topic} | MQTT message [yellow]ENQUEUED[/yellow]")
+                mqtt_msg_queue.put_nowait({"topic": topic, "message": message})
+            else:
+                console.log(f"{topic} | MQTT message [red]DROPPED: FULL QUEUE[/red]")
+        else:
+            console.log(f"{topic} | MQTT message [yellow]DISCARDED[/yellow]")
+        return False
+
+
+def mqtt_say_hello(mqtt_client):
+    return mqtt_send_msg(
+        mqtt_client,
+        MQTT_TOPIC_HELLO,
+        {"device_id": MQTT_DEVICE_NAME, "description": MQTT_DEVICE_DESCRIPTION},
+        enqueue=False,  # Will be resent on_connect
+    )
+
+
+def mqtt_send_file_list(mqtt_client):
+    return mqtt_send_msg(
+        mqtt_client,
+        MQTT_TOPIC_FILES,
+        {
+            "device_id": MQTT_DEVICE_NAME,
+            "file_list": ["file1.txt", "/path/to/file2.mp4"],
+        },
+        enqueue=False,  # Will be resent on_connect or when something changes
+    )
+
+
+def mqtt_send_statistics(mqtt_client, stats_queue):
+    if mqtt_client is None:
+        return
+    while not stats_queue.empty():
+        statistics = stats_queue.get_nowait()
+        topic = MQTT_TOPIC_STATS  # TODO: implement MQTT_TOPIC_ALERTS
+        message = {"device_id": MQTT_DEVICE_NAME, **statistics}
+        mqtt_send_msg(mqtt_client, topic, message, enqueue=True)
 
 
 if __name__ == "__main__":
@@ -102,6 +205,26 @@ if __name__ == "__main__":
         signal.signal(signal.SIGINT, sigint_handler)
         print("[green bold]Press Ctrl+C to stop all processes[/green bold]")
 
+        # MQTT setup
+        mqtt_client = None
+        stats_queue = None
+        if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
+            print(
+                "\nMQTT is DISABLED since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
+            )
+        else:
+            mqtt_broker_port = int(config["maskcam"]["mqtt-broker-port"])
+            print(f"\nConnecting to MQTT server {MQTT_BROKER_IP}:{mqtt_broker_port}")
+            print(f"Device name: {MQTT_DEVICE_NAME}\n\n")
+            mqtt_client = mqtt_connect_broker(
+                client_id=MQTT_DEVICE_NAME,
+                broker_ip=MQTT_BROKER_IP,
+                broker_port=mqtt_broker_port,
+            )
+            mqtt_client.loop_start()
+            # Should only have 1 element at a time unless this thread gets blocked
+            stats_queue = mp.Queue(maxsize=5)
+
         process_inference = None
         process_filesave = None
 
@@ -113,6 +236,7 @@ if __name__ == "__main__":
             config,
             input_filename=input_filename,
             output_filename=inference_savefile,
+            stats_queue=stats_queue,
         )
 
         # TODO: Implement MQTT
@@ -128,6 +252,10 @@ if __name__ == "__main__":
         while not e_interrupt.is_set():
             if not process_inference.is_alive():
                 e_interrupt.set()
+
+            # Send MQTT statistics
+            mqtt_send_statistics(mqtt_client, stats_queue)
+
             e_interrupt.wait(timeout=0.5)
     except:
         console.print_exception()

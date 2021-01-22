@@ -71,7 +71,7 @@ streaming-clock-rate=90000
 # Recommended H264 for stability on video save
 codec=H264
 mqtt-broker-port=1883
-mqtt-send-period=20
+statistics-period=20
 
 
 [property]
@@ -82,8 +82,7 @@ net-scale-factor=0.0039215697906911373
 #0=RGB, 1=BGR
 model-color-format=0
 
-# model-engine-file=../yolo/facemask_y4tiny_1024_608_fp16.trt
-model-engine-file=../facemask_y4tiny_1024_608_fp16_new.trt
+model-engine-file=../yolo/facemask_y4tiny_1024_608_fp16.trt
 labelfile-path=../yolo/data/obj.names
 custom-lib-path=plugin_yolov4/nvdsinfer_custom_impl_Yolo/libnvdsinfer_custom_impl_Yolo.so
 

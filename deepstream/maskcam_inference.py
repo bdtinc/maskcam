@@ -26,7 +26,6 @@ import os
 import gi
 import pyds
 import sys
-import json
 import ipdb
 import time
 import signal
@@ -38,7 +37,6 @@ import multiprocessing as mp
 from rich import print
 from rich.console import Console
 from datetime import datetime, timezone
-from paho.mqtt import client as paho_mqtt_client
 
 
 gi.require_version("Gst", "1.0")
@@ -48,7 +46,14 @@ from gi.repository import GLib, Gst, GstRtspServer
 sys.path.append("../../norfair")
 sys.path.append("../../filterpy")
 from norfair.tracker import Tracker, Detection
-from common import CODEC_MP4, CODEC_H264, CODEC_H265, USBCAM_PROTOCOL, RASPICAM_PROTOCOL, CONFIG_FILE
+from common import (
+    CODEC_MP4,
+    CODEC_H264,
+    CODEC_H265,
+    USBCAM_PROTOCOL,
+    RASPICAM_PROTOCOL,
+    CONFIG_FILE,
+)
 
 
 # YOLO labels. See obj.names file
@@ -56,17 +61,6 @@ PGIE_CLASS_ID_MASK = 0
 PGIE_CLASS_ID_NO_MASK = 1
 PGIE_CLASS_ID_NOT_VISIBLE = 2
 PGIE_CLASS_ID_MISPLACED = 3
-
-# MQTT topics
-TOPIC_HELLO = "hello"
-TOPIC_STATS = "receive-from-jetson"
-TOPIC_ALERTS = "alerts"
-
-# Must come defined as environment var or MQTT gets disabled
-MQTT_BROKER_IP = os.environ.get("MQTT_BROKER_IP", None)
-MQTT_DEVICE_NAME = os.environ.get("MQTT_DEVICE_NAME", None)
-MQTT_DEVICE_DESCRIPTION = "MaskCam @ Jetson Nano"
-
 FRAMES_LOG_INTERVAL = 50
 
 # Global vars
@@ -74,7 +68,6 @@ frame_number = 0
 start_time = None
 end_time = None
 total_frames = 0
-mqtt_client = None
 console = Console()
 e_interrupt = None
 
@@ -199,57 +192,26 @@ tracker = Tracker(
 )
 
 
-def connect_mqtt_broker(
-    client_id: str, broker_ip: str, broker_port: int
-) -> paho_mqtt_client:
-    def on_connect(client, userdata, flags, code):
-        if code == 0:
-            print("Connected to MQTT Broker")
-            say_hello()
-        else:
-            print(f"Failed to connect, return code {code}\n")
+def cb_add_statistics(cb_args):
+    stats_period, stats_queue = cb_args
 
-    client = paho_mqtt_client.Client(client_id)
-    client.on_connect = on_connect
-    client.connect(broker_ip, broker_port)
-    return client
-
-
-def send_mqtt_msg(topic, message):
-    # TODO: Handle queuing if mqtt_client not connected
-    result = mqtt_client.publish(topic, json.dumps(message))
-    if result[0] == 0:
-        console.log(f"MQTT message [green]SENT [bold][topic: {topic}][/bold][/green]")
-    else:
-        console.log(f"MQTT message [red]FAILED [bold][topic: {topic}][/bold][/red]")
-    print(message)
-
-
-def say_hello():
-    send_mqtt_msg(
-        TOPIC_HELLO, {"id": MQTT_DEVICE_NAME, "description": MQTT_DEVICE_DESCRIPTION}
-    )
-
-
-def cb_send_statistics(cb_args):
-    mqtt_send_period = cb_args
-    # Test topic
-    topic = TOPIC_STATS  # TODO: implement TOPIC_ALERTS
     people_total, people_classified, people_mask = face_mask.get_instant_statistics(
         refresh=True
     )
     people_no_mask = people_classified - people_mask
-    message = {
-        "device_id": MQTT_DEVICE_NAME,
-        "people_total": people_total,
-        "people_with_mask": people_mask,
-        "people_without_mask": people_no_mask,
-        "timestamp": datetime.timestamp(datetime.now(timezone.utc)),
-    }
-    send_mqtt_msg(topic, message)
+
+    # stats_queue is an mp.Queue optionally provided externally (in main())
+    stats_queue.put_nowait(
+        {
+            "people_total": people_total,
+            "people_with_mask": people_mask,
+            "people_without_mask": people_no_mask,
+            "timestamp": datetime.timestamp(datetime.now(timezone.utc)),
+        }
+    )
 
     # Next report timeout
-    GLib.timeout_add_seconds(mqtt_send_period, cb_send_statistics, cb_args)
+    GLib.timeout_add_seconds(stats_period, cb_add_statistics, cb_args)
 
 
 def sigint_handler(sig, frame):
@@ -567,18 +529,17 @@ def main(
     input_filename: str,
     output_filename: str = None,
     e_external_interrupt: mp.Event = None,
+    stats_queue: mp.Queue = None,
 ):
     global frame_number
     global total_frames
     global start_time
     global end_time
     global e_interrupt
-    global mqtt_client
 
     udp_port = int(config["maskcam"]["udp-port"])
     codec = config["maskcam"]["codec"]
-    mqtt_broker_port = int(config["maskcam"]["mqtt-broker-port"])
-    mqtt_send_period = int(config["maskcam"]["mqtt-send-period"])
+    stats_period = int(config["maskcam"]["statistics-period"])
     inference_interval = int(config["property"]["interval"])
 
     camera_framerate = config["maskcam"]["camera-framerate"]  # e.g: 10/1, 15/1
@@ -591,20 +552,6 @@ def main(
     output_width = 1024
     output_height = 576
     output_bitrate = 6000000  # Nice for h264@1024x576: 4000000
-
-    if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
-        print(
-            "\nMQTT is DISABLED since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
-        )
-    else:
-        print(f"\nConnecting to MQTT server IP: {MQTT_BROKER_IP}")
-        print(f"Device name: {MQTT_DEVICE_NAME}\n\n")
-        mqtt_client = connect_mqtt_broker(
-            client_id=MQTT_DEVICE_NAME,
-            broker_ip=MQTT_BROKER_IP,
-            broker_port=mqtt_broker_port,
-        )
-        mqtt_client.loop_start()
 
     # Standard GStreamer initialization
     # GObject.threads_init()  # Doesn't seem necessary (see https://pygobject.readthedocs.io/en/latest/guide/threading.html)
@@ -625,11 +572,15 @@ def main(
     if camera_input:
         if usbcam_input:
             input_device = input_filename[len(USBCAM_PROTOCOL) :]
-            source = make_elm_or_print_err("v4l2src", "v4l2-camera-source", "Camera input")
+            source = make_elm_or_print_err(
+                "v4l2src", "v4l2-camera-source", "Camera input"
+            )
             source.set_property("device", input_device)
         elif raspicam_input:
-            input_device = int(input_filename[len(RASPICAM_PROTOCOL) :])
-            source = make_elm_or_print_err("nvarguscamerasrc", "nv-argus-camera-source", "RaspiCam input")
+            input_device = input_filename[len(RASPICAM_PROTOCOL) :]
+            source = make_elm_or_print_err(
+                "nvarguscamerasrc", "nv-argus-camera-source", "RaspiCam input"
+            )
             source.set_property("sensor-id", input_device)
 
         # Misterious converting sequence from deepstream_test_1_usb.py
@@ -855,9 +806,10 @@ def main(
     try:
         time_start_playing = time.time()
 
-        if mqtt_client is not None:
-            cb_args = mqtt_send_period
-            GLib.timeout_add_seconds(mqtt_send_period, cb_send_statistics, cb_args)
+        # Timer to add statistics to queue
+        if stats_queue is not None:
+            cb_args = stats_period, stats_queue
+            GLib.timeout_add_seconds(stats_period, cb_add_statistics, cb_args)
 
         # Custom event loop
         running = True
