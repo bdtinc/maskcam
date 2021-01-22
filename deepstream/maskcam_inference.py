@@ -628,7 +628,7 @@ def main(
             source = make_elm_or_print_err("v4l2src", "v4l2-camera-source", "Camera input")
             source.set_property("device", input_device)
         elif raspicam_input:
-            input_device = input_filename[len(RASPICAM_PROTOCOL) :]
+            input_device = int(input_filename[len(RASPICAM_PROTOCOL) :])
             source = make_elm_or_print_err("nvarguscamerasrc", "nv-argus-camera-source", "RaspiCam input")
             source.set_property("sensor-id", input_device)
 
