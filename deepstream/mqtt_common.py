@@ -1,7 +1,7 @@
 import os
 import json
-import multiprocessing as mp
 from rich import print
+from multiprocessing import Queue
 from typing import Callable, List
 from paho.mqtt import client as paho_mqtt_client
 
@@ -24,7 +24,7 @@ MQTT_DEVICE_NAME = os.environ.get("MQTT_DEVICE_NAME", None)
 MQTT_BROKER_PORT = 1883
 MQTT_DEVICE_DESCRIPTION = "MaskCam @ Jetson Nano"
 
-mqtt_msg_queue = mp.Queue(maxsize=100)  # 100 mqtt messages stored max
+mqtt_msg_queue = Queue(maxsize=100)  # 100 mqtt messages stored max
 
 
 def mqtt_send_queue(mqtt_client):

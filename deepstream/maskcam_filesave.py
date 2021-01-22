@@ -39,6 +39,7 @@ gi.require_version("GstBase", "1.0")
 gi.require_version("GstRtspServer", "1.0")
 from gi.repository import GLib, Gst, GstRtspServer, GstBase
 from common import CODEC_MP4, CODEC_H264, CODEC_H265, CONFIG_FILE
+from utils import glib_cb_restart
 
 e_interrupt = None
 
@@ -59,7 +60,7 @@ def make_elm_or_print_err(factoryname, name, printedname, detail=""):
 
 def sigint_handler(sig, frame):
     # This function is not used if e_external_interrupt is provided
-    print("\n[red]Ctrl+C pressed. Interrupting...[/red]")
+    print("\n[red]Ctrl+C pressed. Interrupting file-save...[/red]")
     e_interrupt.set()
 
 
@@ -168,6 +169,10 @@ def main(
         # If there's an external interrupt, don't capture SIGINT
         e_interrupt = e_external_interrupt
 
+    # Periodic gloop interrupt (see utils.glib_cb_restart)
+    t_check = 50
+    GLib.timeout_add(t_check, glib_cb_restart, t_check)
+
     # Custom event loop, allows saving file on Ctrl+C press
     running = True
 
@@ -176,7 +181,7 @@ def main(
     pipeline.set_state(Gst.State.PLAYING)
 
     while running:
-        g_context.iteration(may_block=False)
+        g_context.iteration(may_block=True)
         message = bus.pop()
         if message is not None:
             t = message.type
@@ -191,8 +196,6 @@ def main(
                 err, debug = message.parse_error()
                 sys.stderr.write("Error: %s: %s\n" % (err, debug))
                 running = False
-        else:
-            time.sleep(100e-3)  # Doesn't wait on messages
         if e_interrupt.is_set():
             print("Interruption received. Sending EOS to generate video file.")
             # This will allow the filesink to create a readable mp4 file

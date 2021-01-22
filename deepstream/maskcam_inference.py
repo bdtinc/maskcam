@@ -54,6 +54,7 @@ from common import (
     RASPICAM_PROTOCOL,
     CONFIG_FILE,
 )
+from utils import glib_cb_restart
 
 
 # YOLO labels. See obj.names file
@@ -216,7 +217,7 @@ def cb_add_statistics(cb_args):
 
 def sigint_handler(sig, frame):
     # This function is not used if e_external_interrupt is provided
-    print("\n[red]Ctrl+C pressed. Interrupting...[/red]")
+    print("\n[red]Ctrl+C pressed. Interrupting inference...[/red]")
     e_interrupt.set()
 
 
@@ -811,10 +812,14 @@ def main(
             cb_args = stats_period, stats_queue
             GLib.timeout_add_seconds(stats_period, cb_add_statistics, cb_args)
 
+        # Periodic gloop interrupt (see utils.glib_cb_restart)
+        t_check = 100
+        GLib.timeout_add(t_check, glib_cb_restart, t_check)
+
         # Custom event loop
         running = True
         while running:
-            g_context.iteration(may_block=False)
+            g_context.iteration(may_block=True)
 
             message = bus.pop()
             if message is not None:
@@ -831,9 +836,6 @@ def main(
                     console.log(f"[red]ERROR [/red] {err}: {debug}\n")
                     show_troubleshooting()
                     running = False
-                else:
-                    # 100ms pause if no messages, only affects termination
-                    time.sleep(100e-3)
             if e_interrupt.is_set():
                 # Send EOS to container to generate a valid mp4 file
                 if output_filename is not None:
