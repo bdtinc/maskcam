@@ -28,21 +28,29 @@ import sys
 import time
 import signal
 import platform
+import threading
 import configparser
+import multiprocessing as mp
 from datetime import datetime
 from rich import print
 
 gi.require_version("Gst", "1.0")
 gi.require_version("GstRtspServer", "1.0")
 from gi.repository import GLib, Gst, GstRtspServer
-from utils import get_ip_address
+from utils import get_ip_address, glib_cb_restart
 from common import CODEC_MP4, CODEC_H264, CODEC_H265, CONFIG_FILE
 
+e_interrupt = None
 
-def main(args):
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    config.sections()
+
+def sigint_handler(sig, frame):
+    # This function is not used if e_external_interrupt is provided
+    print("\n[red]Ctrl+C pressed. Interrupting streaming...[/red]")
+    e_interrupt.set()
+
+
+def main(config, e_external_interrupt: mp.Event = None):
+    global e_interrupt
     udp_port = int(config["maskcam"]["udp-port"])
     codec = config["maskcam"]["codec"]
     # Streaming address: rtsp://<jetson-ip>:<rtsp-port>/<rtsp-address>
@@ -77,15 +85,30 @@ def main(args):
 
     # GLib loop required for RTSP server
     g_loop = GLib.MainLoop()
+    g_context = g_loop.get_context()
 
-    try:
-        g_loop.run()
-    except KeyboardInterrupt:
-        print("\n[yellow]Keyboard interruption received[/yellow]")
-    except Exception as e:
-        print(f"Exception: {e}")
+    if e_external_interrupt is None:
+        # Use threading instead of mp.Event() for sigint_handler, see:
+        # https://bugs.python.org/issue41606
+        e_interrupt = threading.Event()
+        signal.signal(signal.SIGINT, sigint_handler)
+        print("[green bold]Press Ctrl+C to stop pipeline[/green bold]")
+    else:
+        # If there's an external interrupt, don't capture SIGINT
+        e_interrupt = e_external_interrupt
+
+    # Periodic gloop interrupt (see utils.glib_cb_restart)
+    t_check = 100
+    GLib.timeout_add(t_check, glib_cb_restart, t_check)
+
+    while not e_interrupt.is_set():
+        g_context.iteration(may_block=True)
+
     print("Ending streaming")
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE)
+    config.sections()
+    main(config)
