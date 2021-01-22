@@ -1,11 +1,11 @@
 import os
 import sys
-import signal
 import time
 import json
+import signal
 import threading
-import multiprocessing as mp
 import configparser
+import multiprocessing as mp
 
 from rich import print
 from rich.console import Console
@@ -13,8 +13,10 @@ from datetime import datetime
 from paho.mqtt import client as paho_mqtt_client
 
 from common import CONFIG_FILE, USBCAM_PROTOCOL, RASPICAM_PROTOCOL
+from utils import get_ip_address
 from maskcam_inference import main as inference_main
 from maskcam_filesave import main as filesave_main
+from maskcam_fileserver import main as fileserver_main
 from maskcam_streaming import main as streaming_main
 
 
@@ -141,6 +143,7 @@ def mqtt_send_file_list(mqtt_client):
         MQTT_TOPIC_FILES,
         {
             "device_id": MQTT_DEVICE_NAME,
+            "file_server": get_ip_address(),
             "file_list": ["file1.txt", "/path/to/file2.mp4"],
         },
         enqueue=False,  # Will be resent on_connect or when something changes
@@ -155,6 +158,27 @@ def mqtt_send_statistics(mqtt_client, stats_queue):
         topic = MQTT_TOPIC_STATS  # TODO: implement MQTT_TOPIC_ALERTS
         message = {"device_id": MQTT_DEVICE_NAME, **statistics}
         mqtt_send_msg(mqtt_client, topic, message, enqueue=True)
+
+
+def mqtt_init(config):
+    if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
+        print(
+            "\nMQTT is DISABLED since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
+        )
+        return None, None
+    else:
+        mqtt_broker_port = int(config["maskcam"]["mqtt-broker-port"])
+        print(f"\nConnecting to MQTT server {MQTT_BROKER_IP}:{mqtt_broker_port}")
+        print(f"Device name: {MQTT_DEVICE_NAME}\n\n")
+        mqtt_client = mqtt_connect_broker(
+            client_id=MQTT_DEVICE_NAME,
+            broker_ip=MQTT_BROKER_IP,
+            broker_port=mqtt_broker_port,
+        )
+        mqtt_client.loop_start()
+        # Should only have 1 element at a time unless this thread gets blocked
+        stats_queue = mp.Queue(maxsize=5)
+        return mqtt_client, stats_queue
 
 
 if __name__ == "__main__":
@@ -189,53 +213,32 @@ if __name__ == "__main__":
             input_filename = config["maskcam"]["default-input"]
             print(f"Using input from config file: {input_filename}")
 
-        # Output file name
+        # Input type: file or live camera
         is_usbcamera = USBCAM_PROTOCOL in input_filename
         is_raspicamera = RASPICAM_PROTOCOL in input_filename
         is_live_input = is_usbcamera or is_raspicamera
-        if is_live_input:
-            output_dir = config["maskcam"]["default-output-dir"]
-            output_filename = (
-                f"{output_dir}/{datetime.today().strftime('%Y%m%d_%H%M%S')}.mp4"
-            )
-        else:
-            output_filename = f"output_{input_filename.split('/')[-1]}"
-        print(f"Output file: [green]{output_filename}[/green]")
 
+        # Init MQTT or set these to None
+        mqtt_client, stats_queue = mqtt_init(config)
+
+        # SIGINT handler (Ctrl+C)
         signal.signal(signal.SIGINT, sigint_handler)
         print("[green bold]Press Ctrl+C to stop all processes[/green bold]")
 
-        # MQTT setup
-        mqtt_client = None
-        stats_queue = None
-        if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
-            print(
-                "\nMQTT is DISABLED since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
-            )
-        else:
-            mqtt_broker_port = int(config["maskcam"]["mqtt-broker-port"])
-            print(f"\nConnecting to MQTT server {MQTT_BROKER_IP}:{mqtt_broker_port}")
-            print(f"Device name: {MQTT_DEVICE_NAME}\n\n")
-            mqtt_client = mqtt_connect_broker(
-                client_id=MQTT_DEVICE_NAME,
-                broker_ip=MQTT_BROKER_IP,
-                broker_port=mqtt_broker_port,
-            )
-            mqtt_client.loop_start()
-            # Should only have 1 element at a time unless this thread gets blocked
-            stats_queue = mp.Queue(maxsize=5)
-
         process_inference = None
         process_filesave = None
+        process_fileserver = None
 
         # Inference process: If input is a file, also saves file
-        inference_savefile = None if is_live_input else output_filename
+        output_filename = (
+            None if is_live_input else f"output_{input_filename.split('/')[-1]}"
+        )
         process_inference, e_interrupt_inference = start_process(
             "inference",
             inference_main,
             config,
             input_filename=input_filename,
-            output_filename=inference_savefile,
+            output_filename=output_filename,
             stats_queue=stats_queue,
         )
 
@@ -243,11 +246,20 @@ if __name__ == "__main__":
         # TODO: Implement streaming
         # TODO: Implement periodic filesaving
 
-        if is_live_input:
-            # Video file save process
-            process_filesave, e_interrupt_filesave = start_process(
-                "file-save", filesave_main, config, output_filename=output_filename
+        # Create dir for saved video chunks
+        if is_live_input and int(config["maskcam"]["fileserver-enabled"]):
+            # Start fileserver
+            process_fileserver, e_interrupt_fileserver = start_process(
+                "file-server", fileserver_main, config
             )
+            # output_dir = config["maskcam"]["file-temp-dir"]
+            # output_filename = (
+            #     f"{output_dir}/{datetime.today().strftime('%Y%m%d_%H%M%S')}.mp4"
+            # )
+            # # Video file save process
+            # process_filesave, e_interrupt_filesave = start_process(
+            #     "file-save", filesave_main, config, output_filename=output_filename
+            # )
 
         while not e_interrupt.is_set():
             if not process_inference.is_alive():
@@ -266,7 +278,9 @@ if __name__ == "__main__":
         if process_inference is not None and process_inference.is_alive():
             terminate_process("inference", process_inference, e_interrupt_inference)
         if process_filesave is not None and process_filesave.is_alive():
-            terminate_process("file-save", process_filesave, e_interrupt_filesave)
+            terminate_process("file-save", process_filesave, e_interrupt_fileserver)
+        if process_fileserver is not None and process_fileserver.is_alive():
+            terminate_process("file-server", process_fileserver, e_interrupt_fileserver)
     except:
         console.print("\n\nAn exception occurred trying to terminate some process")
         console.print_exception()

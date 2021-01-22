@@ -63,7 +63,6 @@ default-input=v4l2:///dev/video0
 # Run utils/gst_capabilities.sh and find some combination with framerate <= 14 fps
 camera-framerate=10/1
 
-default-output-dir=/dev/shm
 udp-port=5400
 streaming-port=8554
 streaming-clock-rate=90000
@@ -72,6 +71,11 @@ streaming-clock-rate=90000
 codec=H264
 mqtt-broker-port=1883
 statistics-period=20
+file-temp-dir=/dev/shm
+fileserver-enabled=1
+
+# Note these will be deleted on system reboot
+fileserver-dir=/tmp/saved_videos
 
 
 [property]
