@@ -21,6 +21,9 @@ yolo/*.weights
 maskcam/*.trt
 yolo/*.engine
 
+# Environment files (not templates)
+server/*.env
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

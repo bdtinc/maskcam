@@ -92,7 +92,6 @@ def process_message(database_session, msg):
             print(f"Adding files for device_id: {message['device_id']}")
             update_files(db_session=database_session, device_id=message["device_id"], file_list=message["file_list"])
         except Exception as e:
-            import pdb; pdb.set_trace()
             print(f"Exception trying to update files: {e}")
 
     elif topic == "send-to-jetson":
@@ -101,8 +100,7 @@ def process_message(database_session, msg):
 
 
 def main():
-    client = connect_mqtt_broker(client_id=SUBSCRIBER_CLIENT_ID)
-    subscribe(client)
+    client = connect_mqtt_broker(client_id=SUBSCRIBER_CLIENT_ID, cb_connect=subscribe)
     client.loop_forever()
 
 

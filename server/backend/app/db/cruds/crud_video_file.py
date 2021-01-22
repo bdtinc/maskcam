@@ -11,8 +11,8 @@ from sqlalchemy.orm.exc import NoResultFound
 def update_files(
     db_session: Session,
     device_id: str,
-    file_list,
-):
+    file_list: List,
+) -> List[VideoFilesModel]:
     """
     Update the whole list of available files for this device
 
@@ -26,7 +26,8 @@ def update_files(
     """
     # Remove all previous files for device_id
     query = db_session.query(VideoFilesModel)
-    query.filter(VideoFilesModel.device_id == device_id).delete(synchronize_session=False)
+    query = query.filter(VideoFilesModel.device_id == device_id)
+    query.delete(synchronize_session=False)
     db_session.commit()
 
     # Add new list
