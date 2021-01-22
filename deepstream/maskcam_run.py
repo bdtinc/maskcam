@@ -10,26 +10,33 @@ import multiprocessing as mp
 from rich import print
 from rich.console import Console
 from datetime import datetime
-from paho.mqtt import client as paho_mqtt_client
 
 from common import CONFIG_FILE, USBCAM_PROTOCOL, RASPICAM_PROTOCOL
 from utils import get_ip_address
+from mqtt_common import mqtt_connect_broker, mqtt_send_msg
+from mqtt_common import (
+    MQTT_BROKER_IP,
+    MQTT_BROKER_PORT,
+    MQTT_DEVICE_DESCRIPTION,
+    MQTT_DEVICE_NAME,
+)
+from mqtt_common import (
+    MQTT_TOPIC_ALERTS,
+    MQTT_TOPIC_FILES,
+    MQTT_TOPIC_HELLO,
+    MQTT_TOPIC_STATS,
+    MQTT_TOPIC_COMMANDS,
+)
+from mqtt_common import (
+    MQTT_CMD_FILE_SAVE,
+    MQTT_CMD_STREAMING_START,
+    MQTT_CMD_STREAMING_STOP,
+    MQTT_CMD_INFERENCE_RESTART,
+)
 from maskcam_inference import main as inference_main
 from maskcam_filesave import main as filesave_main
 from maskcam_fileserver import main as fileserver_main
 from maskcam_streaming import main as streaming_main
-
-
-# MQTT topics
-MQTT_TOPIC_HELLO = "hello"
-MQTT_TOPIC_STATS = "receive-from-jetson"
-MQTT_TOPIC_ALERTS = "alerts"
-MQTT_TOPIC_FILES = "video-files"
-
-# Must come defined as environment var or MQTT gets disabled
-MQTT_BROKER_IP = os.environ.get("MQTT_BROKER_IP", None)
-MQTT_DEVICE_NAME = os.environ.get("MQTT_DEVICE_NAME", None)
-MQTT_DEVICE_DESCRIPTION = "MaskCam @ Jetson Nano"
 
 
 # mp.set_start_method("spawn")
@@ -37,8 +44,6 @@ MQTT_DEVICE_DESCRIPTION = "MaskCam @ Jetson Nano"
 # Use threading instead of mp.Event() for sigint_handler, see:
 # https://bugs.python.org/issue41606
 e_interrupt = threading.Event()
-
-mqtt_msg_queue = mp.Queue(maxsize=100)  # 100 mqtt messages stored max
 
 
 def sigint_handler(sig, frame):
@@ -73,59 +78,43 @@ def terminate_process(name, process, e_interrupt_process):
     print(f"Process terminated: [yellow]{name}[/yellow]\n")
 
 
-def mqtt_send_queue(mqtt_client):
-    success = True
-    while not mqtt_msg_queue.empty() and success:
-        q_msg = mqtt_msg_queue.get_nowait()
-        print(f"Sending enqueued message to topic: {q_msg['topic']}")
-        success = mqtt_send_msg(mqtt_client, q_msg["topic"], q_msg["message"])
-    return success
-
-
-def mqtt_on_connect(client, userdata, flags, code):
-    if code == 0:
-        print("[green]Connected to MQTT Broker[/green]")
-        success = mqtt_say_hello(client)
-        success = success and mqtt_send_file_list(client)
-        success = success and mqtt_send_queue(client)
-        if not success:
-            print(f"[red]Failed to send MQTT message after connecting[/red]")
+def mqtt_init(config):
+    if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
+        print(
+            "\nMQTT is DISABLED since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
+        )
+        return None, None
     else:
-        print(f"[red]Failed to connect to MQTT[/red], return code {code}\n")
+        print(f"\nConnecting to MQTT server {MQTT_BROKER_IP}:{MQTT_BROKER_PORT}")
+        print(f"Device name: [green]{MQTT_DEVICE_NAME}[/green]\n\n")
+        mqtt_client = mqtt_connect_broker(
+            client_id=MQTT_DEVICE_NAME,
+            broker_ip=MQTT_BROKER_IP,
+            broker_port=MQTT_BROKER_PORT,
+            subscribe_to=[(MQTT_TOPIC_COMMANDS, 2)],  # handles re-subscription
+            cb_success=mqtt_on_connect,
+        )
+        # Should only have 1 element at a time unless this thread gets blocked
+        stats_queue = mp.Queue(maxsize=5)
+        mqtt_client.on_message = mqtt_process_message
+
+        return mqtt_client, stats_queue
 
 
-def mqtt_connect_broker(
-    client_id: str, broker_ip: str, broker_port: int
-) -> paho_mqtt_client:
-    client = paho_mqtt_client.Client(client_id)
-    client.on_connect = mqtt_on_connect
-    client.connect(broker_ip, broker_port)
-    return client
+def mqtt_on_connect(mqtt_client):
+    mqtt_say_hello(mqtt_client)
+    mqtt_send_file_list(mqtt_client)
 
 
-def mqtt_send_msg(mqtt_client, topic, message, enqueue=True):
-    if mqtt_client is None:
-        print(f"Skipping MQTT message to topic: {topic}")
-        return False
-
-    # Check previous enqueued msgs
-    mqtt_send_queue(mqtt_client)
-
-    result = mqtt_client.publish(topic, json.dumps(message))
-    if result[0] == 0:
-        console.log(f"{topic} | MQTT message [green]SENT[/green]")
-        print(message)
-        return True
-    else:
-        if enqueue:
-            if not mqtt_msg_queue.full():
-                console.log(f"{topic} | MQTT message [yellow]ENQUEUED[/yellow]")
-                mqtt_msg_queue.put_nowait({"topic": topic, "message": message})
-            else:
-                console.log(f"{topic} | MQTT message [red]DROPPED: FULL QUEUE[/red]")
-        else:
-            console.log(f"{topic} | MQTT message [yellow]DISCARDED[/yellow]")
-        return False
+def mqtt_process_message(mqtt_client, userdata, message):
+    topic = message.topic
+    if topic == MQTT_TOPIC_COMMANDS:
+        payload = json.loads(message.payload.decode())
+        if payload["device_id"] != MQTT_DEVICE_NAME:
+            return
+        command = payload["command"]
+        print(f"Received command: [yellow]{command}[/yellow]")
+        print("Handler not implemented yet")
 
 
 def mqtt_say_hello(mqtt_client):
@@ -158,27 +147,6 @@ def mqtt_send_statistics(mqtt_client, stats_queue):
         topic = MQTT_TOPIC_STATS  # TODO: implement MQTT_TOPIC_ALERTS
         message = {"device_id": MQTT_DEVICE_NAME, **statistics}
         mqtt_send_msg(mqtt_client, topic, message, enqueue=True)
-
-
-def mqtt_init(config):
-    if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
-        print(
-            "\nMQTT is DISABLED since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
-        )
-        return None, None
-    else:
-        mqtt_broker_port = int(config["maskcam"]["mqtt-broker-port"])
-        print(f"\nConnecting to MQTT server {MQTT_BROKER_IP}:{mqtt_broker_port}")
-        print(f"Device name: {MQTT_DEVICE_NAME}\n\n")
-        mqtt_client = mqtt_connect_broker(
-            client_id=MQTT_DEVICE_NAME,
-            broker_ip=MQTT_BROKER_IP,
-            broker_port=mqtt_broker_port,
-        )
-        mqtt_client.loop_start()
-        # Should only have 1 element at a time unless this thread gets blocked
-        stats_queue = mp.Queue(maxsize=5)
-        return mqtt_client, stats_queue
 
 
 if __name__ == "__main__":
