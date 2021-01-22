@@ -44,10 +44,12 @@ from maskcam_streaming import main as streaming_main
 # Use threading instead of mp.Event() for sigint_handler, see:
 # https://bugs.python.org/issue41606
 e_interrupt = threading.Event()
+q_commands = mp.Queue(maxsize=4)
+console = Console()
 
 
 def sigint_handler(sig, frame):
-    print("\n[red]Ctrl+C pressed. Interrupting...[/red]")
+    print("\n[red]Ctrl+C pressed. Interrupting all processes...[/red]")
     e_interrupt.set()
 
 
@@ -110,11 +112,15 @@ def mqtt_process_message(mqtt_client, userdata, message):
     topic = message.topic
     if topic == MQTT_TOPIC_COMMANDS:
         payload = json.loads(message.payload.decode())
+
         if payload["device_id"] != MQTT_DEVICE_NAME:
             return
         command = payload["command"]
+        if q_commands.full():
+            console.log(f"[red]Command {command} IGNORED[/red]. Queue is full.")
+            return
         print(f"Received command: [yellow]{command}[/yellow]")
-        print("Handler not implemented yet")
+        q_commands.put_nowait(command)
 
 
 def mqtt_say_hello(mqtt_client):
@@ -167,7 +173,6 @@ if __name__ == "__main__":
         \t   according to the time interval defined in output-chunks-duration in config_maskcam.txt.
         """
         )
-    console = Console()
     try:
         config = configparser.ConfigParser()
         config.read(CONFIG_FILE)
@@ -194,6 +199,7 @@ if __name__ == "__main__":
         print("[green bold]Press Ctrl+C to stop all processes[/green bold]")
 
         process_inference = None
+        process_streaming = None
         process_filesave = None
         process_fileserver = None
 
@@ -210,16 +216,14 @@ if __name__ == "__main__":
             stats_queue=stats_queue,
         )
 
-        # TODO: Implement MQTT
-        # TODO: Implement streaming
-        # TODO: Implement periodic filesaving
-
         # Create dir for saved video chunks
         if is_live_input and int(config["maskcam"]["fileserver-enabled"]):
-            # Start fileserver
+            # Start static fileserver for saved videos
             process_fileserver, e_interrupt_fileserver = start_process(
                 "file-server", fileserver_main, config
             )
+
+            # TODO: Implement periodic filesaving
             # output_dir = config["maskcam"]["file-temp-dir"]
             # output_filename = (
             #     f"{output_dir}/{datetime.today().strftime('%Y%m%d_%H%M%S')}.mp4"
@@ -230,13 +234,43 @@ if __name__ == "__main__":
             # )
 
         while not e_interrupt.is_set():
-            if not process_inference.is_alive():
-                e_interrupt.set()
-
             # Send MQTT statistics
             mqtt_send_statistics(mqtt_client, stats_queue)
 
-            e_interrupt.wait(timeout=0.5)
+            if not q_commands.empty():
+                command = q_commands.get_nowait()
+                print(f"Processing command: [yellow]{command}[yellow]")
+                if command == MQTT_CMD_STREAMING_START:
+                    if process_streaming is None or not process_streaming.is_alive():
+                        process_streaming, e_interrupt_streaming = start_process(
+                            "streaming", streaming_main, config
+                        )
+                elif command == MQTT_CMD_STREAMING_STOP:
+                    if process_streaming is not None and process_streaming.is_alive():
+                        terminate_process(
+                            "streaming", process_streaming, e_interrupt_streaming
+                        )
+                elif command == MQTT_CMD_INFERENCE_RESTART:
+                    if process_inference.is_alive():
+                        terminate_process(
+                            "inference", process_inference, e_interrupt_inference
+                        )
+                    process_inference, e_interrupt_inference = start_process(
+                        "inference",
+                        inference_main,
+                        config,
+                        input_filename=input_filename,
+                        output_filename=output_filename,
+                        stats_queue=stats_queue,
+                    )
+                else:
+                    print("[red]Command not recognized[/red]")
+            else:
+                e_interrupt.wait(timeout=0.1)
+
+            if not process_inference.is_alive():
+                e_interrupt.set()
+
     except:
         console.print_exception()
 
