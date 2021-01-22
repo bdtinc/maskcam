@@ -20,7 +20,7 @@ Power cycle the Photon carrier board or hit the RESET button to reboot it. Work 
 sudo apt purge libreoffice*
 sudo apt purge thunderbird*
 sudo rm -rf /usr/share/example-content/Ubuntu_Free_Culture_Showcase/
-sudo rm -rf /usr/share/backgrounds
+sudo rm -rf /usr/share/backgrounds/*.jpg
 ```
 
 This frees up about 450MB of storage space on the Nano, which is needed for installing CUDA and Deepstream. If this step is skipped, installing CUDA and Deepstream will cause the Nano's storage disk to be completely full, and the Nano will be unable to boot.
