@@ -162,7 +162,9 @@ def mqtt_send_statistics(mqtt_client, stats_queue):
         mqtt_send_msg(mqtt_client, topic, message, enqueue=True)
 
 
-def handle_file_saving(video_period, video_duration, ram_dir, hdd_dir):
+def handle_file_saving(
+    video_period, video_duration, ram_dir, hdd_dir, mqtt_client=None
+):
     period = timedelta(seconds=video_period)
     duration = timedelta(seconds=video_duration)
     latest_start = None
@@ -172,7 +174,7 @@ def handle_file_saving(video_period, video_duration, ram_dir, hdd_dir):
     terminated_idxs = []
     for idx, active_process in enumerate(active_filesave_processes):
         if datetime.now() - active_process["started"] >= duration:
-            finish_filesave_process(active_process, hdd_dir)
+            finish_filesave_process(active_process, hdd_dir, mqtt_client=mqtt_client)
             terminated_idxs.append(idx)
         if latest_start is None or active_process["started"] > latest_start:
             latest_start = active_process["started"]
@@ -211,7 +213,7 @@ def handle_file_saving(video_period, video_duration, ram_dir, hdd_dir):
         )
 
 
-def finish_filesave_process(active_process, hdd_dir):
+def finish_filesave_process(active_process, hdd_dir, mqtt_client=None):
     terminate_process(
         active_process["name"],
         active_process["process_handler"],
@@ -224,6 +226,8 @@ def finish_filesave_process(active_process, hdd_dir):
         print(f"Permanent video file created: [green]{definitive_filepath}[/green]")
         # Must use shutil here to move RAM->HDD
         shutil.move(active_process["filepath"], definitive_filepath)
+        # Send updated file list via MQTT (prints ignore if mqtt_client is None)
+        mqtt_send_file_list(mqtt_client)
     else:
         print(f"Removing RAM video file: {active_process['filepath']}")
         os.remove(active_process["filepath"])
@@ -322,6 +326,7 @@ if __name__ == "__main__":
                     fileserver_duration,
                     fileserver_ram_dir,
                     fileserver_hdd_dir,
+                    mqtt_client=mqtt_client,
                 )
 
             if not q_commands.empty():
@@ -366,7 +371,9 @@ if __name__ == "__main__":
     # Terminate all running processes, avoid breaking on any exception
     for active_file_process in active_filesave_processes:
         try:
-            finish_filesave_process(active_file_process, fileserver_hdd_dir)
+            finish_filesave_process(
+                active_file_process, fileserver_hdd_dir, mqtt_client=mqtt_client
+            )
         except:
             console.print_exception()
     try:
