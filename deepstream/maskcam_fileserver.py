@@ -19,11 +19,15 @@ def start_server(httpd_server):
     httpd_server.serve_forever(poll_interval=0.5)
 
 
+def cb_handle_error(request, client_address):
+    print(f"Some static file request was interrupted at client: {client_address}")
+
+
 def main(config, directory=None, e_external_interrupt: mp.Event = None):
     if directory is not None:
         print(f"Provided serving directory: {directory}")
     else:
-        directory = config["maskcam"]["fileserver-dir"]
+        directory = config["maskcam"]["fileserver-hdd-dir"]
         print(f"Using fileserver-dir from config file: {directory}")
     directory = os.fspath(directory)
 
@@ -33,6 +37,7 @@ def main(config, directory=None, e_external_interrupt: mp.Event = None):
 
     print(f"Starting static file server at port {PORT}, directory: {os.getcwd()}")
     with ThreadingTCPServer(("", PORT), SimpleHTTPRequestHandler) as httpd:
+        httpd.handle_error = cb_handle_error
         s = threading.Thread(target=start_server, args=(httpd,))
         s.start()
         try:
@@ -44,11 +49,13 @@ def main(config, directory=None, e_external_interrupt: mp.Event = None):
             print("Ctrl+C pressed")
         print("Shutting down server")
         httpd.shutdown()
+        httpd.server_close()
         s.join(timeout=1)
         if s.is_alive():
             print("[red]Server thread did not stop[/red]")
         else:
             print("[yellow]Server shut down correctly[/yellow]")
+    print(f"Alive threads: {threading.enumerate()}")
 
 
 if __name__ == "__main__":
