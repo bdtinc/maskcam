@@ -86,9 +86,9 @@ class FaceMask:
         self.color_mask = (0.0, 1.0, 0.0)  # green
         self.color_no_mask = (1.0, 0.0, 0.0)  # red
         self.color_unknown = (1.0, 1.0, 0.0)  # yellow
-        self.draw_raw_detections = True
+        self.draw_raw_detections = False
         self.draw_tracked_people = True
-        self.tracker_enabled = False
+        self.tracker_enabled = True
         self.stats_lock = threading.Lock()
 
     def validate_detection(self, box_points, score, label):

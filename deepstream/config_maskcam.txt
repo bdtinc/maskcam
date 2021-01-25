@@ -63,13 +63,19 @@ default-input=v4l2:///dev/video0
 # Run utils/gst_capabilities.sh and find some combination with framerate <= 14 fps
 camera-framerate=10/1
 
+# Statistics and alerts
+alert-min-visible-people=1
+alert-max-total-people=10
+alert-no-mask-fraction=0.25
+# This must be smaller than fileserver-video-period so that alerts save the right video
+statistics-period=15
+
 udp-port=5400
 streaming-port=8554
 streaming-clock-rate=90000
 # Supported: MP4, H264, H265
 # Recommended H264 for stability on video save
 codec=H264
-statistics-period=20
 
 # Sequentially saving videos
 fileserver-enabled=1

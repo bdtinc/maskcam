@@ -96,7 +96,7 @@ def mqtt_init(config):
             "\n[red]MQTT is DISABLED[/red]"
             " since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
         )
-        return None, None
+        mqtt_client = None
     else:
         print(f"\nConnecting to MQTT server {MQTT_BROKER_IP}:{MQTT_BROKER_PORT}")
         print(f"Device name: [green]{MQTT_DEVICE_NAME}[/green]\n\n")
@@ -107,11 +107,9 @@ def mqtt_init(config):
             subscribe_to=[(MQTT_TOPIC_COMMANDS, 2)],  # handles re-subscription
             cb_success=mqtt_on_connect,
         )
-        # Should only have 1 element at a time unless this thread gets blocked
-        stats_queue = mp.Queue(maxsize=5)
         mqtt_client.on_message = mqtt_process_message
 
-        return mqtt_client, stats_queue
+        return mqtt_client
 
 
 def mqtt_on_connect(mqtt_client):
@@ -152,14 +150,40 @@ def mqtt_send_file_list(mqtt_client):
     )
 
 
-def mqtt_send_statistics(mqtt_client, stats_queue):
-    if mqtt_client is None:
-        return
+def is_alert_condition(statistics, config):
+    # Thresholds config
+    max_total_people = int(config["maskcam"]["alert-max-total-people"])
+    min_visible_people = int(config["maskcam"]["alert-min-visible-people"])
+    max_no_mask = float(config["maskcam"]["alert-no-mask-fraction"])
+
+    # Calculate visible people
+    without_mask = int(statistics["people_without_mask"])
+    with_mask = int(statistics["people_with_mask"])
+    visible_people = with_mask + without_mask
+    is_alert = False
+    if statistics["people_total"] > max_total_people:
+        is_alert = True
+    elif visible_people >= min_visible_people:
+        no_mask_fraction = float(statistics["people_without_mask"]) / visible_people
+        is_alert = no_mask_fraction > max_no_mask
+
+    print(f"[yellow]ALERT condition: {is_alert}[/yellow]")
+    return is_alert
+
+
+def handle_statistics(mqtt_client, stats_queue, config):
     while not stats_queue.empty():
         statistics = stats_queue.get_nowait()
-        topic = MQTT_TOPIC_STATS  # TODO: implement MQTT_TOPIC_ALERTS
-        message = {"device_id": MQTT_DEVICE_NAME, **statistics}
-        mqtt_send_msg(mqtt_client, topic, message, enqueue=True)
+
+        # Alert conditions detection
+        raise_alert = is_alert_condition(statistics, config)
+        if raise_alert:
+            flag_keep_current_files()
+
+        if mqtt_client is not None:
+            topic = MQTT_TOPIC_ALERTS if raise_alert else MQTT_TOPIC_STATS
+            message = {"device_id": MQTT_DEVICE_NAME, **statistics}
+            mqtt_send_msg(mqtt_client, topic, message, enqueue=True)
 
 
 def handle_file_saving(
@@ -286,8 +310,14 @@ if __name__ == "__main__":
         fileserver_ram_dir = config["maskcam"]["fileserver-ram-dir"]
         fileserver_hdd_dir = config["maskcam"]["fileserver-hdd-dir"]
 
+        # Should only have 1 element at a time unless this thread gets blocked
+        stats_queue = mp.Queue(maxsize=5)
+
         # Init MQTT or set these to None
-        mqtt_client, stats_queue = mqtt_init(config)
+        if is_live_input:
+            mqtt_client = mqtt_init(config)
+        else:
+            mqtt_client = None
 
         # SIGINT handler (Ctrl+C)
         signal.signal(signal.SIGINT, sigint_handler)
@@ -316,8 +346,8 @@ if __name__ == "__main__":
             )
 
         while not e_interrupt.is_set():
-            # Send MQTT statistics
-            mqtt_send_statistics(mqtt_client, stats_queue)
+            # Send MQTT statistics, detect alarm events and request file-saving
+            handle_statistics(mqtt_client, stats_queue, config)
 
             # Handle sequential file saving processes
             if fileserver_enabled:
