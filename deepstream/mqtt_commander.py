@@ -1,3 +1,4 @@
+import sys
 import json
 import time
 from rich import print
@@ -22,6 +23,13 @@ def show_message(mqtt_client, userdata, message):
     print(f"Message received in topic: [yellow]{message.topic}[/yellow]")
     print(json.loads(message.payload.decode()))
 
+
+if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
+    print(
+        "\n[red]MQTT is DISABLED[/red]"
+        " since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
+    )
+    sys.exit(0)
 
 # Subscribe to some topics
 print("\n[blue]Available topics:[/blue]")

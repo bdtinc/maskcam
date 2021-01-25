@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import json
+import shutil
 import signal
 import threading
 import configparser
@@ -9,7 +10,7 @@ import multiprocessing as mp
 
 from rich import print
 from rich.console import Console
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from common import CONFIG_FILE, USBCAM_PROTOCOL, RASPICAM_PROTOCOL
 from common import (
@@ -45,6 +46,7 @@ from maskcam_streaming import main as streaming_main
 # https://bugs.python.org/issue41606
 e_interrupt = threading.Event()
 q_commands = mp.Queue(maxsize=4)
+active_filesave_processes = []
 console = Console()
 
 
@@ -91,7 +93,8 @@ def new_command(command):
 def mqtt_init(config):
     if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
         print(
-            "\nMQTT is DISABLED since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
+            "\n[red]MQTT is DISABLED[/red]"
+            " since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
         )
         return None, None
     else:
@@ -159,6 +162,80 @@ def mqtt_send_statistics(mqtt_client, stats_queue):
         mqtt_send_msg(mqtt_client, topic, message, enqueue=True)
 
 
+def handle_file_saving(video_period, video_duration, ram_dir, hdd_dir):
+    period = timedelta(seconds=video_period)
+    duration = timedelta(seconds=video_duration)
+    latest_start = None
+    latest_number = 0
+
+    # Handle termination of previous file-saving processes and move files RAM->HDD
+    terminated_idxs = []
+    for idx, active_process in enumerate(active_filesave_processes):
+        if datetime.now() - active_process["started"] >= duration:
+            finish_filesave_process(active_process, hdd_dir)
+            terminated_idxs.append(idx)
+        if latest_start is None or active_process["started"] > latest_start:
+            latest_start = active_process["started"]
+            latest_number = active_process["number"]
+
+    # Remove terminated processes from list in a separated loop
+    for idx in sorted(terminated_idxs, reverse=True):
+        del active_filesave_processes[idx]
+
+    # Start new file-saving process if time has elapsed
+    if latest_start is None or (datetime.now() - latest_start >= period):
+        console.log(
+            "[green]Time to start a new video file [/green]"
+            f" [latest started at: {latest_start}]"
+        )
+        new_process_number = latest_number + 1
+        new_process_name = f"file-save-{new_process_number}"
+        new_filename = (
+            f"{datetime.today().strftime('%Y%m%d_%H%M%S')}_{new_process_number}.mp4"
+        )
+        new_filepath = f"{ram_dir}/{new_filename}"
+        process_handler, e_interrupt_process = start_process(
+            new_process_name, filesave_main, config, output_filename=new_filepath
+        )
+        active_filesave_processes.append(
+            dict(
+                number=new_process_number,
+                name=new_process_name,
+                filepath=new_filepath,
+                filename=new_filename,
+                started=datetime.now(),
+                process_handler=process_handler,
+                e_interrupt=e_interrupt_process,
+                flag_keep_file=False,
+            )
+        )
+
+
+def finish_filesave_process(active_process, hdd_dir):
+    terminate_process(
+        active_process["name"],
+        active_process["process_handler"],
+        active_process["e_interrupt"],
+    )
+
+    # Move file to its definitive place if flagged, otherwise remove it
+    if active_process["flag_keep_file"]:
+        definitive_filepath = f"{hdd_dir}/{active_process['filename']}"
+        print(f"Permanent video file created: [green]{definitive_filepath}[/green]")
+        # Must use shutil here to move RAM->HDD
+        shutil.move(active_process["filepath"], definitive_filepath)
+    else:
+        print(f"Removing RAM video file: {active_process['filepath']}")
+        os.remove(active_process["filepath"])
+
+
+def flag_keep_current_files():
+    print("Request to [green]save current video files[/green]")
+    for process in active_filesave_processes:
+        print(f"Set flag to keep: [green]{process['filename']}[/green]")
+        process["flag_keep_file"] = True
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 2:
         print(
@@ -177,6 +254,7 @@ if __name__ == "__main__":
         \t   according to the time interval defined in output-chunks-duration in config_maskcam.txt.
         """
         )
+        sys.exit(0)
     try:
         config = configparser.ConfigParser()
         config.read(CONFIG_FILE)
@@ -195,6 +273,15 @@ if __name__ == "__main__":
         is_raspicamera = RASPICAM_PROTOCOL in input_filename
         is_live_input = is_usbcamera or is_raspicamera
 
+        # Fileserver: sequentially save videos (only for camera input)
+        fileserver_enabled = is_live_input and int(
+            config["maskcam"]["fileserver-enabled"]
+        )
+        fileserver_period = int(config["maskcam"]["fileserver-video-period"])
+        fileserver_duration = int(config["maskcam"]["fileserver-video-duration"])
+        fileserver_ram_dir = config["maskcam"]["fileserver-ram-dir"]
+        fileserver_hdd_dir = config["maskcam"]["fileserver-hdd-dir"]
+
         # Init MQTT or set these to None
         mqtt_client, stats_queue = mqtt_init(config)
 
@@ -204,7 +291,6 @@ if __name__ == "__main__":
 
         process_inference = None
         process_streaming = None
-        process_filesave = None
         process_fileserver = None
 
         # Inference process: If input is a file, also saves file
@@ -220,26 +306,23 @@ if __name__ == "__main__":
             stats_queue=stats_queue,
         )
 
-        # Create dir for saved video chunks
-        if is_live_input and int(config["maskcam"]["fileserver-enabled"]):
-            # Start static fileserver for saved videos
+        if fileserver_enabled:
             process_fileserver, e_interrupt_fileserver = start_process(
-                "file-server", fileserver_main, config
+                "file-server", fileserver_main, config, directory=fileserver_hdd_dir
             )
-
-            # TODO: Implement periodic filesaving
-            # output_dir = config["maskcam"]["file-temp-dir"]
-            # output_filename = (
-            #     f"{output_dir}/{datetime.today().strftime('%Y%m%d_%H%M%S')}.mp4"
-            # )
-            # # Video file save process
-            # process_filesave, e_interrupt_filesave = start_process(
-            #     "file-save", filesave_main, config, output_filename=output_filename
-            # )
 
         while not e_interrupt.is_set():
             # Send MQTT statistics
             mqtt_send_statistics(mqtt_client, stats_queue)
+
+            # Handle sequential file saving processes
+            if fileserver_enabled:
+                handle_file_saving(
+                    fileserver_period,
+                    fileserver_duration,
+                    fileserver_ram_dir,
+                    fileserver_hdd_dir,
+                )
 
             if not q_commands.empty():
                 command = q_commands.get_nowait()
@@ -267,6 +350,8 @@ if __name__ == "__main__":
                         output_filename=output_filename,
                         stats_queue=stats_queue,
                     )
+                elif command == CMD_FILE_SAVE:
+                    flag_keep_current_files()
                 else:
                     print("[red]Command not recognized[/red]")
             else:
@@ -278,15 +363,24 @@ if __name__ == "__main__":
     except:
         console.print_exception()
 
+    # Terminate all running processes, avoid breaking on any exception
+    for active_file_process in active_filesave_processes:
+        try:
+            finish_filesave_process(active_file_process, fileserver_hdd_dir)
+        except:
+            console.print_exception()
     try:
-        # If process_inference was not created will throw exception, but process_filesave
-        # won't have been created either so it's not important to shut it down.
         if process_inference is not None and process_inference.is_alive():
             terminate_process("inference", process_inference, e_interrupt_inference)
-        if process_filesave is not None and process_filesave.is_alive():
-            terminate_process("file-save", process_filesave, e_interrupt_fileserver)
+    except:
+        console.print_exception()
+    try:
         if process_fileserver is not None and process_fileserver.is_alive():
             terminate_process("file-server", process_fileserver, e_interrupt_fileserver)
     except:
-        console.print("\n\nAn exception occurred trying to terminate some process")
+        console.print_exception()
+    try:
+        if process_streaming is not None and process_streaming.is_alive():
+            terminate_process("streaming", process_streaming, e_interrupt_streaming)
+    except:
         console.print_exception()

@@ -70,11 +70,14 @@ streaming-clock-rate=90000
 # Recommended H264 for stability on video save
 codec=H264
 statistics-period=20
-file-temp-dir=/dev/shm
-fileserver-enabled=1
 
-# Note these will be deleted on system reboot
-fileserver-dir=/tmp/saved_videos
+# Sequentially saving videos
+fileserver-enabled=1
+fileserver-video-period=30
+fileserver-video-duration=35
+fileserver-ram-dir=/dev/shm
+# Use /tmp/* to clean saved videos on system reboot
+fileserver-hdd-dir=/tmp/saved_videos
 
 
 [property]
