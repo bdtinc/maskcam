@@ -18,6 +18,7 @@ from common import (
     CMD_STREAMING_START,
     CMD_STREAMING_STOP,
     CMD_INFERENCE_RESTART,
+    CMD_FILESERVER_RESTART,
 )
 from utils import get_ip_address
 from mqtt_common import mqtt_connect_broker, mqtt_send_msg
@@ -350,7 +351,7 @@ if __name__ == "__main__":
             handle_statistics(mqtt_client, stats_queue, config)
 
             # Handle sequential file saving processes
-            if fileserver_enabled:
+            if fileserver_enabled and is_live_input:  # server can be enabled via MQTT
                 handle_file_saving(
                     fileserver_period,
                     fileserver_duration,
@@ -385,6 +386,18 @@ if __name__ == "__main__":
                         output_filename=output_filename,
                         stats_queue=stats_queue,
                     )
+                elif command == CMD_FILESERVER_RESTART:
+                    if process_fileserver.is_alive():
+                        terminate_process(
+                            "file-server", process_fileserver, e_interrupt_fileserver
+                        )
+                    process_fileserver, e_interrupt_fileserver = start_process(
+                        "file-server",
+                        fileserver_main,
+                        config,
+                        directory=fileserver_hdd_dir,
+                    )
+                    fileserver_enabled = True
                 elif command == CMD_FILE_SAVE:
                     flag_keep_current_files()
                 else:
