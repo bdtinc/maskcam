@@ -10,11 +10,11 @@ from mqtt_common import (
     MQTT_TOPIC_STATS,
     MQTT_TOPIC_COMMANDS,
 )
-from mqtt_common import (
-    MQTT_CMD_FILE_SAVE,
-    MQTT_CMD_STREAMING_START,
-    MQTT_CMD_STREAMING_STOP,
-    MQTT_CMD_INFERENCE_RESTART,
+from common import (
+    CMD_FILE_SAVE,
+    CMD_STREAMING_START,
+    CMD_STREAMING_STOP,
+    CMD_INFERENCE_RESTART,
 )
 
 
@@ -49,10 +49,10 @@ mqtt_client.on_message = show_message
 time.sleep(1)  # Wait to print connection messages
 # Send commands
 print("\n[blue]Available commands:[/blue]")
-print(MQTT_CMD_FILE_SAVE)
-print(MQTT_CMD_STREAMING_START)
-print(MQTT_CMD_STREAMING_STOP)
-print(MQTT_CMD_INFERENCE_RESTART)
+print(CMD_FILE_SAVE)
+print(CMD_STREAMING_START)
+print(CMD_STREAMING_STOP)
+print(CMD_INFERENCE_RESTART)
 while True:
     cmd = input("\nSend command to device (q to exit):\n")
     if cmd == "q":

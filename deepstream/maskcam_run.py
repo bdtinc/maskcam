@@ -12,6 +12,12 @@ from rich.console import Console
 from datetime import datetime
 
 from common import CONFIG_FILE, USBCAM_PROTOCOL, RASPICAM_PROTOCOL
+from common import (
+    CMD_FILE_SAVE,
+    CMD_STREAMING_START,
+    CMD_STREAMING_STOP,
+    CMD_INFERENCE_RESTART,
+)
 from utils import get_ip_address
 from mqtt_common import mqtt_connect_broker, mqtt_send_msg
 from mqtt_common import (
@@ -26,12 +32,6 @@ from mqtt_common import (
     MQTT_TOPIC_HELLO,
     MQTT_TOPIC_STATS,
     MQTT_TOPIC_COMMANDS,
-)
-from mqtt_common import (
-    MQTT_CMD_FILE_SAVE,
-    MQTT_CMD_STREAMING_START,
-    MQTT_CMD_STREAMING_STOP,
-    MQTT_CMD_INFERENCE_RESTART,
 )
 from maskcam_inference import main as inference_main
 from maskcam_filesave import main as filesave_main
@@ -80,6 +80,14 @@ def terminate_process(name, process, e_interrupt_process):
     print(f"Process terminated: [yellow]{name}[/yellow]\n")
 
 
+def new_command(command):
+    if q_commands.full():
+        console.log(f"[red]Command {command} IGNORED[/red]. Queue is full.")
+        return
+    print(f"Received command: [yellow]{command}[/yellow]")
+    q_commands.put_nowait(command)
+
+
 def mqtt_init(config):
     if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
         print(
@@ -116,11 +124,7 @@ def mqtt_process_message(mqtt_client, userdata, message):
         if payload["device_id"] != MQTT_DEVICE_NAME:
             return
         command = payload["command"]
-        if q_commands.full():
-            console.log(f"[red]Command {command} IGNORED[/red]. Queue is full.")
-            return
-        print(f"Received command: [yellow]{command}[/yellow]")
-        q_commands.put_nowait(command)
+        new_command(command)
 
 
 def mqtt_say_hello(mqtt_client):
@@ -240,17 +244,17 @@ if __name__ == "__main__":
             if not q_commands.empty():
                 command = q_commands.get_nowait()
                 print(f"Processing command: [yellow]{command}[yellow]")
-                if command == MQTT_CMD_STREAMING_START:
+                if command == CMD_STREAMING_START:
                     if process_streaming is None or not process_streaming.is_alive():
                         process_streaming, e_interrupt_streaming = start_process(
                             "streaming", streaming_main, config
                         )
-                elif command == MQTT_CMD_STREAMING_STOP:
+                elif command == CMD_STREAMING_STOP:
                     if process_streaming is not None and process_streaming.is_alive():
                         terminate_process(
                             "streaming", process_streaming, e_interrupt_streaming
                         )
-                elif command == MQTT_CMD_INFERENCE_RESTART:
+                elif command == CMD_INFERENCE_RESTART:
                     if process_inference.is_alive():
                         terminate_process(
                             "inference", process_inference, e_interrupt_inference

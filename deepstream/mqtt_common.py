@@ -12,12 +12,6 @@ MQTT_TOPIC_ALERTS = "alerts"
 MQTT_TOPIC_FILES = "video-files"
 MQTT_TOPIC_COMMANDS = "commands"
 
-# MQTT commands to device
-MQTT_CMD_FILE_SAVE = "save_file"
-MQTT_CMD_STREAMING_START = "streaming_start"
-MQTT_CMD_STREAMING_STOP = "streaming_stop"
-MQTT_CMD_INFERENCE_RESTART = "inference_restart"
-
 # Must come defined as environment var or MQTT gets disabled
 MQTT_BROKER_IP = os.environ.get("MQTT_BROKER_IP", None)
 MQTT_DEVICE_NAME = os.environ.get("MQTT_DEVICE_NAME", None)
