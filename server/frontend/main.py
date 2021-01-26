@@ -1,11 +1,26 @@
-from datetime import datetime, time, timezone
+import os
+import json
 
 import pandas as pd
 import streamlit as st
 
+from datetime import datetime, time, timezone
 from session_manager import get_state
 from utils.api_utils import get_device, get_devices, get_statistics_from_to, get_device_files
 from utils.format_utils import create_chart, format_data
+
+from paho.mqtt import publish as mqtt_publish
+
+MQTT_BROKER = os.environ["MQTT_BROKER"]
+MQTT_BROKER_PORT = int(os.environ["MQTT_BROKER_PORT"])
+MQTT_CLIENT_ID = os.environ["MQTT_CLIENT_ID"]
+
+MQTT_TOPIC_COMMANDS = "commands"
+CMD_FILE_SAVE = "save_file"
+CMD_STREAMING_START = "streaming_start"
+CMD_STREAMING_STOP = "streaming_stop"
+CMD_INFERENCE_RESTART = "inference_restart"
+CMD_FILESERVER_RESTART = "fileserver_restart"
 
 
 def display_sidebar(all_devices, state):
@@ -67,6 +82,28 @@ def display_device(state):
         st.header("General information")
         st.markdown(f'**Id:** {device["id"]}')
         st.markdown(f'**Description:** {device["description"]}')
+        mqtt_status = st.empty()
+        cols = st.beta_columns(6)
+        # Buttons from right to left
+        with cols.pop():
+            if st.button("Restart Deepstream"):
+                send_mqtt_command(device["id"], CMD_INFERENCE_RESTART, mqtt_status)
+        with cols.pop():
+            if st.button("Restart file server"):
+                send_mqtt_command(device["id"], CMD_FILESERVER_RESTART, mqtt_status)
+        with cols.pop():
+            if st.button("Stop streaming"):
+                send_mqtt_command(device["id"], CMD_STREAMING_STOP, mqtt_status)
+        with cols.pop():
+            if st.button("Start streaming"):
+                send_mqtt_command(device["id"], CMD_STREAMING_START, mqtt_status)
+        with cols.pop():
+            if st.button("Save a video"):
+                send_mqtt_command(device["id"], CMD_FILE_SAVE, mqtt_status)
+        with cols.pop():
+            if st.button("Refresh page"):
+                # Force frontend to refresh
+                pass
 
         st.header("Statistics")
         device_statistics = None
@@ -123,10 +160,30 @@ def display_device(state):
                 #             unsafe_allow_html=True)
 
 
+def mqtt_set_status(mqtt_status, text):
+    mqtt_status.markdown(f"**MQTT status:** {text}")
+
+def send_mqtt_message(topic, message, mqtt_status):
+    try:
+        mqtt_publish.single(topic,
+                            json.dumps(message),
+                            hostname=MQTT_BROKER,
+                            port=MQTT_BROKER_PORT,
+                            client_id=MQTT_CLIENT_ID)
+        mqtt_set_status(mqtt_status, "Message sent")
+        return True
+    except Exception as e:
+        mqtt_set_status(mqtt_status, f"Could not send MQTT message to broker: {e}")
+        return False
+
+def send_mqtt_command(device_id, command, mqtt_status):
+    send_mqtt_message(MQTT_TOPIC_COMMANDS, {"device_id": device_id, "command": command}, mqtt_status)
+
+
 def main():
+    state = get_state()
     st.set_page_config(page_title="Maskcam")
 
-    state = get_state()
     st.title("MaskCam device")
     all_devices = get_devices()
     display_sidebar(all_devices, state)
@@ -134,9 +191,6 @@ def main():
     if state.selected_device is None:
         st.write("Please select a device.")
     else:
-        if st.button("Refresh"):
-            # Force frontend to refresh
-            pass
         display_device(state)
 
     state.sync()
