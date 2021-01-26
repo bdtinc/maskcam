@@ -3,7 +3,7 @@ import json
 from app.core.config import SUBSCRIBER_CLIENT_ID, MQTT_HELLO_TOPIC,\
                             MQTT_ALERT_TOPIC, MQTT_SEND_TOPIC,\
                             MQTT_REPORT_TOPIC, MQTT_FILES_TOPIC
-from app.db.cruds import create_device, create_statistic, update_files
+from app.db.cruds import create_device, create_statistic, update_files, update_device
 from app.db.schema import get_db_session
 from app.db.utils import convert_timestamp_to_datetime, get_enum_type
 from broker import connect_mqtt_broker
@@ -90,6 +90,8 @@ def process_message(database_session, msg):
     elif topic == "video-files":
         try:
             print(f"Adding files for device_id: {message['device_id']}")
+            new_information = {"file_server_address": message["file_server"]}
+            update_device(db_session=database_session, device_id=message["device_id"], new_device_information=new_information)
             update_files(db_session=database_session, device_id=message["device_id"], file_list=message["file_list"])
         except Exception as e:
             print(f"Exception trying to update files: {e}")

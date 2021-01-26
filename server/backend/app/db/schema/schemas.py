@@ -20,6 +20,7 @@ class StatisticSchema(BaseModel):
 class DeviceSchema(BaseModel):
     id: str
     description: Optional[str] = None
+    file_server_address: Optional[str] = None
     statistics: List[StatisticSchema] = []
 
     class Config:

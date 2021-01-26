@@ -70,7 +70,7 @@ def get_device_item(
 @device_router.get(
     "/devices",
     response_model=List[DeviceSchema],
-    response_model_include={"id", "description"},
+    response_model_include={"id", "description", "file_server_address"},
 )
 def get_devices_items(db: Session = Depends(get_db_generator)):
     """

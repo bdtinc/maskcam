@@ -115,7 +115,12 @@ def display_device(state):
             st.write("The selected device has no saved files yet")
         else:
             for file_instance in device_files:
-                st.write(file_instance["video_name"])
+                url = f"{device['file_server_address']}/{file_instance['video_name']}"
+                st.markdown(f"[{file_instance['video_name']}]({url})")
+                # Adding download attribute won't work anyway on chrome
+                # st.markdown(f"<a href=\"{url}\" download=\"{file_instance['video_name']}\""
+                #             f" target=\"_blank\">{file_instance['video_name']}</a>",
+                #             unsafe_allow_html=True)
 
 
 def main():

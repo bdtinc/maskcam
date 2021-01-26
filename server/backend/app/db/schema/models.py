@@ -35,5 +35,6 @@ class DeviceModel(Base):
 
     id = Column(String, primary_key=True)
     description = Column(String)
+    file_server_address = Column(String)
     statistics = relationship("StatisticsModel", cascade="all, delete")
     video_files = relationship("VideoFilesModel", cascade="all, delete")
