@@ -79,6 +79,7 @@ codec=H264
 
 # Sequentially saving videos
 fileserver-enabled=1
+fileserver-port=8080
 fileserver-video-period=30
 fileserver-video-duration=35
 fileserver-ram-dir=/dev/shm

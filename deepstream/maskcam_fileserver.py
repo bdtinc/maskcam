@@ -11,32 +11,37 @@ from common import CONFIG_FILE
 from utils import get_ip_address
 from rich import print
 
-PORT = 8080
+
+class Handler(SimpleHTTPRequestHandler):
+    # Needed to set extensions_map
+    pass
 
 
 def start_server(httpd_server):
-    print(f"[green]Static server STARTED[/green] at IP: {get_ip_address()}")
     httpd_server.serve_forever(poll_interval=0.5)
 
 
 def cb_handle_error(request, client_address):
-    print(f"Some static file request was interrupted at client: {client_address}")
+    print(f"Static file server: File request interrupted [client: {client_address}]")
 
 
 def main(config, directory=None, e_external_interrupt: mp.Event = None):
-    if directory is not None:
-        print(f"Provided serving directory: {directory}")
-    else:
+    if directory is None:
         directory = config["maskcam"]["fileserver-hdd-dir"]
-        print(f"Using fileserver-dir from config file: {directory}")
     directory = os.fspath(directory)
+    print(f"Serving static files from directory: [yellow]{directory}[/yellow]")
+
+    port = int(config["maskcam"]["fileserver-port"])
 
     # Create dir if doesn't exist
     os.system(f"mkdir -p {directory}")
     os.chdir(directory)  # easiest way
 
-    print(f"Starting static file server at port {PORT}, directory: {os.getcwd()}")
-    with ThreadingTCPServer(("", PORT), SimpleHTTPRequestHandler) as httpd:
+    # Force download mp4 files
+    Handler.extensions_map[".mp4"] = "application/octet-stream"
+
+    print(f"[green]Static server STARTED[/green] at http://{get_ip_address()}:{port}")
+    with ThreadingTCPServer(("", port), Handler) as httpd:
         httpd.handle_error = cb_handle_error
         s = threading.Thread(target=start_server, args=(httpd,))
         s.start()
@@ -47,7 +52,7 @@ def main(config, directory=None, e_external_interrupt: mp.Event = None):
                 s.join()  # blocking
         except KeyboardInterrupt:
             print("Ctrl+C pressed")
-        print("Shutting down server")
+        print("Shutting down static file server")
         httpd.shutdown()
         httpd.server_close()
         s.join(timeout=1)

@@ -50,6 +50,10 @@ q_commands = mp.Queue(maxsize=4)
 active_filesave_processes = []
 console = Console()
 
+config = configparser.ConfigParser()
+config.read(CONFIG_FILE)
+config.sections()
+
 
 def sigint_handler(sig, frame):
     print("\n[red]Ctrl+C pressed. Interrupting all processes...[/red]")
@@ -139,13 +143,19 @@ def mqtt_say_hello(mqtt_client):
 
 
 def mqtt_send_file_list(mqtt_client):
+    server_address = get_ip_address()
+    server_port = int(config["maskcam"]["fileserver-port"])
+    try:
+        file_list = sorted(os.listdir(config["maskcam"]["fileserver-hdd-dir"]))
+    except FileNotFoundError:
+        file_list = []
     return mqtt_send_msg(
         mqtt_client,
         MQTT_TOPIC_FILES,
         {
             "device_id": MQTT_DEVICE_NAME,
-            "file_server": get_ip_address(),
-            "file_list": ["file1.txt", "/path/to/file2.mp4"],
+            "file_server": f"http://{server_address}:{server_port}",
+            "file_list": file_list,
         },
         enqueue=False,  # Will be resent on_connect or when something changes
     )
@@ -285,10 +295,6 @@ if __name__ == "__main__":
         )
         sys.exit(0)
     try:
-        config = configparser.ConfigParser()
-        config.read(CONFIG_FILE)
-        config.sections()
-
         # Input source
         if len(sys.argv) > 1:
             input_filename = sys.argv[1]
@@ -328,6 +334,11 @@ if __name__ == "__main__":
         process_streaming = None
         process_fileserver = None
 
+        if fileserver_enabled:
+            process_fileserver, e_interrupt_fileserver = start_process(
+                "file-server", fileserver_main, config, directory=fileserver_hdd_dir
+            )
+
         # Inference process: If input is a file, also saves file
         output_filename = (
             None if is_live_input else f"output_{input_filename.split('/')[-1]}"
@@ -340,11 +351,6 @@ if __name__ == "__main__":
             output_filename=output_filename,
             stats_queue=stats_queue,
         )
-
-        if fileserver_enabled:
-            process_fileserver, e_interrupt_fileserver = start_process(
-                "file-server", fileserver_main, config, directory=fileserver_hdd_dir
-            )
 
         while not e_interrupt.is_set():
             # Send MQTT statistics, detect alarm events and request file-saving

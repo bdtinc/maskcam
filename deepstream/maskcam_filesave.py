@@ -77,15 +77,13 @@ def main(
 
     udp_capabilities = f"application/x-rtp,media=video,encoding-name=(string){codec},clock-rate={streaming_clock_rate}"
 
-    print(f"Codec: {codec}")
-
     # Standard GStreamer initialization
     # GObject.threads_init()  # Doesn't seem necessary (see https://pygobject.readthedocs.io/en/latest/guide/threading.html)
     Gst.init(None)
 
     # Create gstreamer elements
     # Create Pipeline element that will form a connection of other elements
-    print("Creating Pipeline \n ")
+    print("\n[green]Creating:[/green] file-saving pipeline UDP->File")
     pipeline = Gst.Pipeline()
 
     if not pipeline:
@@ -142,8 +140,6 @@ def main(
     pipeline.add(container)
     pipeline.add(filesink)
 
-    print("Linking elements in the Pipeline \n")
-
     # Pipeline Links
     udpsrc.link(rtpjitterbuffer)
     rtpjitterbuffer.link(rtpdepay)
@@ -177,8 +173,8 @@ def main(
     running = True
 
     # start play back and listen to events
-    print("Starting pipeline")
     pipeline.set_state(Gst.State.PLAYING)
+    print("[green]Playing:[/green] file-saving pipeline UDP->File\n")
 
     while running:
         g_context.iteration(may_block=True)
