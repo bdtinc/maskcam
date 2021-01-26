@@ -198,7 +198,7 @@ def handle_statistics(mqtt_client, stats_queue, config):
 
 
 def handle_file_saving(
-    video_period, video_duration, ram_dir, hdd_dir, mqtt_client=None
+    video_period, video_duration, ram_dir, hdd_dir, force_save, mqtt_client=None
 ):
     period = timedelta(seconds=video_period)
     duration = timedelta(seconds=video_duration)
@@ -209,7 +209,9 @@ def handle_file_saving(
     terminated_idxs = []
     for idx, active_process in enumerate(active_filesave_processes):
         if datetime.now() - active_process["started"] >= duration:
-            finish_filesave_process(active_process, hdd_dir, mqtt_client=mqtt_client)
+            finish_filesave_process(
+                active_process, hdd_dir, force_save, mqtt_client=mqtt_client
+            )
             terminated_idxs.append(idx)
         if latest_start is None or active_process["started"] > latest_start:
             latest_start = active_process["started"]
@@ -248,7 +250,7 @@ def handle_file_saving(
         )
 
 
-def finish_filesave_process(active_process, hdd_dir, mqtt_client=None):
+def finish_filesave_process(active_process, hdd_dir, force_filesave, mqtt_client=None):
     terminate_process(
         active_process["name"],
         active_process["process_handler"],
@@ -256,8 +258,9 @@ def finish_filesave_process(active_process, hdd_dir, mqtt_client=None):
     )
 
     # Move file to its definitive place if flagged, otherwise remove it
-    if active_process["flag_keep_file"]:
+    if active_process["flag_keep_file"] or force_filesave:
         definitive_filepath = f"{hdd_dir}/{active_process['filename']}"
+        print(f"Force file saving: {bool(force_filesave)}")
         print(f"Permanent video file created: [green]{definitive_filepath}[/green]")
         # Must use shutil here to move RAM->HDD
         shutil.move(active_process["filepath"], definitive_filepath)
@@ -314,6 +317,7 @@ if __name__ == "__main__":
         )
         fileserver_period = int(config["maskcam"]["fileserver-video-period"])
         fileserver_duration = int(config["maskcam"]["fileserver-video-duration"])
+        fileserver_force_save = int(config["maskcam"]["fileserver-force-save"])
         fileserver_ram_dir = config["maskcam"]["fileserver-ram-dir"]
         fileserver_hdd_dir = config["maskcam"]["fileserver-hdd-dir"]
 
@@ -363,6 +367,7 @@ if __name__ == "__main__":
                     fileserver_duration,
                     fileserver_ram_dir,
                     fileserver_hdd_dir,
+                    fileserver_force_save,
                     mqtt_client=mqtt_client,
                 )
 
@@ -421,7 +426,10 @@ if __name__ == "__main__":
     for active_file_process in active_filesave_processes:
         try:
             finish_filesave_process(
-                active_file_process, fileserver_hdd_dir, mqtt_client=mqtt_client
+                active_file_process,
+                fileserver_hdd_dir,
+                fileserver_force_save,
+                mqtt_client=mqtt_client,
             )
         except:
             console.print_exception()
