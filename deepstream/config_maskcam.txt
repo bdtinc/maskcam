@@ -82,7 +82,7 @@ fileserver-enabled=1
 fileserver-port=8080
 fileserver-video-period=30
 fileserver-video-duration=35
-fileserver-force-save=1
+fileserver-force-save=0
 fileserver-ram-dir=/dev/shm
 # Use /tmp/* to clean saved videos on system reboot
 fileserver-hdd-dir=/tmp/saved_videos

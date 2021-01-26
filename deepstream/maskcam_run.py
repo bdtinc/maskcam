@@ -398,7 +398,7 @@ if __name__ == "__main__":
                         stats_queue=stats_queue,
                     )
                 elif command == CMD_FILESERVER_RESTART:
-                    if process_fileserver.is_alive():
+                    if process_fileserver is not None and process_fileserver.is_alive():
                         terminate_process(
                             "file-server", process_fileserver, e_interrupt_fileserver
                         )
