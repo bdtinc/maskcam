@@ -1,7 +1,10 @@
 # MaskCam [BDTi Cube]
 Adaptation of the Face Masks Detector to run on Jetson Nano
 
-## Preparing to run on Jetson Nano
+## Running on Jetson Nano with Photon carrier board
+Please see the setup instructions at [Photon-Nano-Setup.md](https://github.com/tryolabs/bdti-jetson/blob/main/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
+
+## Preparing to run on Jetson Nano Developer Kit
 1. Make sure these packages are installed at system level:
 ```
 sudo apt install python3-opencv python3-libnvinfer
