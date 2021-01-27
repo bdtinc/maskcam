@@ -1,5 +1,0 @@
-classes = 4
-train = ../yolo/data/train.txt
-valid = ../yolo/data/valid.txt
-names = ../yolo/data/obj.names
-backup = ../yolo/backup/

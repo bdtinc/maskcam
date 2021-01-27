@@ -8,6 +8,8 @@ import glob
 
 from integrations.yolo.yolo_adaptor import YoloAdaptor
 
+# Requires python tensorrt, usually compiled for python 3.6 at system level
+from integrations.yolo.detector_trt import DetectorYoloTRT
 
 # %%
 images_folder = sys.argv[1]
@@ -26,29 +28,13 @@ if input(f"Confirm output to [{output_folder}] [y/n]").strip() != "y":
 os.system(f"mkdir -p {output_folder}")
 
 # %%
-with open("config.yml", "r") as stream:
+with open("config_images.yml", "r") as stream:
     # Not using Loader=yaml.FullLoader since it doesn't work on jetson PyYAML version
     config = yaml.load(stream)
 
-# Pick YOLO detector implementation to use
-yolo_variant = config["yolo_generic"]["yolo_variant"]
-yolo_config = {**config[yolo_variant], **config["yolo_generic"]}
-print(f"Loading yolo variant: {yolo_variant}")
+yolo_config = {**config["yolo_trt_tiny"], **config["yolo_generic"]}
 
-prefix_trt = "yolo_trt"  # yolo_trt and yolo_trt_tiny
-if yolo_variant[: len(prefix_trt)] == prefix_trt:  # Fastest implementation
-    # Requires python tensorrt, usually compiled for python 3.6 at system level
-    from integrations.yolo.detector_trt import DetectorYoloTRT  # noqa
-
-    detector = DetectorYoloTRT(yolo_config)
-elif yolo_variant == "yolo_pytorch":
-    from integrations.yolo.detector_pytorch import DetectorYoloPytorch  # noqa
-
-    detector = DetectorYoloPytorch(yolo_config)
-else:
-    from integrations.yolo.detector_darknet import DetectorDarknet  # noqa
-
-    detector = DetectorDarknet(yolo_config)
+detector = DetectorYoloTRT(yolo_config)
 
 # Converter functions from Yolo -> Tracker + FaceMaskDetector
 pose_adaptor = YoloAdaptor(config["yolo_generic"])
