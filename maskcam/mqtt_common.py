@@ -1,9 +1,10 @@
 import os
 import json
-from prints import print_mqtt as print
 from multiprocessing import Queue
 from typing import Callable, List
 from paho.mqtt import client as paho_mqtt_client
+
+from .prints import print_mqtt as print
 
 # MQTT topics
 MQTT_TOPIC_HELLO = "hello"

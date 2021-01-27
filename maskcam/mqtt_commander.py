@@ -2,16 +2,17 @@ import sys
 import json
 import time
 from rich import print
-from mqtt_common import mqtt_send_msg, mqtt_connect_broker
-from mqtt_common import MQTT_BROKER_IP, MQTT_BROKER_PORT, MQTT_DEVICE_NAME
-from mqtt_common import (
+
+from .mqtt_common import mqtt_send_msg, mqtt_connect_broker
+from .mqtt_common import MQTT_BROKER_IP, MQTT_BROKER_PORT, MQTT_DEVICE_NAME
+from .mqtt_common import (
     MQTT_TOPIC_ALERTS,
     MQTT_TOPIC_FILES,
     MQTT_TOPIC_HELLO,
     MQTT_TOPIC_STATS,
     MQTT_TOPIC_COMMANDS,
 )
-from common import (
+from .common import (
     CMD_FILE_SAVE,
     CMD_STREAMING_START,
     CMD_STREAMING_STOP,

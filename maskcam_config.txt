@@ -1,0 +1,65 @@
+[maskcam]
+default-input=v4l2:///dev/video0
+
+# Run utils/gst_capabilities.sh and find some combination with framerate <= 14 fps
+camera-framerate=10/1
+
+# Statistics and alerts
+alert-min-visible-people=1
+alert-max-total-people=10
+alert-no-mask-fraction=0.25
+# This must be smaller than fileserver-video-period so that alerts save the right video
+statistics-period=15
+
+udp-port=5400
+streaming-port=8554
+streaming-clock-rate=90000
+# Supported: MP4, H264, H265
+# Recommended H264 for stability on video save
+codec=H264
+
+# Sequentially saving videos
+fileserver-enabled=1
+fileserver-port=8080
+fileserver-video-period=30
+fileserver-video-duration=35
+fileserver-force-save=0
+fileserver-ram-dir=/dev/shm
+# Use /tmp/* to clean saved videos on system reboot
+fileserver-hdd-dir=/tmp/saved_videos
+
+
+[property]
+interval=0
+gpu-id=0
+# Was: 
+net-scale-factor=0.0039215697906911373
+#0=RGB, 1=BGR
+model-color-format=0
+
+model-engine-file=yolo/facemask_y4tiny_1024_608_fp16.trt
+labelfile-path=yolo/data/obj.names
+custom-lib-path=deepstream_plugin_yolov4/libnvdsinfer_custom_impl_Yolo.so
+
+## 0=FP32, 1=INT8, 2=FP16 mode
+network-mode=2
+num-detected-classes=4
+gie-unique-id=1
+network-type=0
+# is-classifier=0
+## 0=Group Rectangles, 1=DBSCAN, 2=NMS, 3= DBSCAN+NMS Hybrid, 4 = None(No clustering)
+# Default: 2
+cluster-mode=2
+# Skip inference these frames
+maintain-aspect-ratio=0
+parse-bbox-func-name=NvDsInferParseCustomYoloV4
+engine-create-func-name=NvDsInferYoloCudaEngineGet
+scaling-filter=1
+scaling-compute-hw=1
+#output-blob-names=2012
+
+[class-attrs-all]
+nms-iou-threshold=0.2
+
+# Default: 0.4
+pre-cluster-threshold=0.4
