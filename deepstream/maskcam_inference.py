@@ -34,7 +34,7 @@ import threading
 import configparser
 import numpy as np
 import multiprocessing as mp
-from rich import print
+from prints import print_inference as print
 from rich.console import Console
 from datetime import datetime, timezone
 
@@ -217,7 +217,7 @@ def cb_add_statistics(cb_args):
 
 def sigint_handler(sig, frame):
     # This function is not used if e_external_interrupt is provided
-    print("\n[red]Ctrl+C pressed. Interrupting inference...[/red]")
+    print("[red]Ctrl+C pressed. Interrupting inference...[/red]")
     e_interrupt.set()
 
 
@@ -271,7 +271,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
 
     gst_buffer = info.get_buffer()
     if not gst_buffer:
-        console.log("Unable to get GstBuffer ")
+        print("Unable to get GstBuffer", error=True)
         return
 
     # Retrieve batch metadata from the gst_buffer
@@ -279,7 +279,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
     # C address of gst_buffer as input, which is obtained with hash(gst_buffer)
     batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
     if not total_frames % FRAMES_LOG_INTERVAL:
-        console.log(f"Processed {total_frames} frames...")
+        print(f"Processed {total_frames} frames...")
 
     l_frame = batch_meta.frame_meta_list
     while l_frame is not None:
@@ -435,11 +435,11 @@ def cb_newpad(decodebin, decoder_src_pad, data):
             # Get the source bin ghost pad
             bin_ghost_pad = source_bin.get_static_pad("src")
             if not bin_ghost_pad.set_target(decoder_src_pad):
-                sys.stderr.write(
-                    "Failed to link decoder src pad to source bin ghost pad\n"
+                print(
+                    "Failed to link decoder src pad to source bin ghost pad", error=True
                 )
         else:
-            sys.stderr.write(" Error: Decodebin did not pick nvidia decoder plugin.\n")
+            print("Decodebin did not pick nvidia decoder plugin", error=True)
 
 
 def decodebin_child_added(child_proxy, Object, name, user_data):
@@ -459,14 +459,14 @@ def create_source_bin(index, uri):
     print(bin_name)
     nbin = Gst.Bin.new(bin_name)
     if not nbin:
-        sys.stderr.write(" Unable to create source bin \n")
+        print("Unable to create source bin", error=True)
 
     # Source element for reading from the uri.
     # We will use decodebin and let it figure out the container format of the
     # stream and the codec and plug the appropriate demux and decode plugins.
     uri_decode_bin = Gst.ElementFactory.make("uridecodebin", "uri-decode-bin")
     if not uri_decode_bin:
-        sys.stderr.write(" Unable to create uri decode bin \n")
+        print("Unable to create uri decode bin", error=True)
     # We set the input uri to the source element
     uri_decode_bin.set_property("uri", uri)
     # Connect to the "pad-added" signal of the decodebin which generates a
@@ -482,7 +482,7 @@ def create_source_bin(index, uri):
     Gst.Bin.add(nbin, uri_decode_bin)
     bin_pad = nbin.add_pad(Gst.GhostPad.new_no_target("src", Gst.PadDirection.SRC))
     if not bin_pad:
-        sys.stderr.write(" Failed to add ghost pad in source bin \n")
+        print("Failed to add ghost pad in source bin", error=True)
         return None
     return nbin
 
@@ -495,7 +495,7 @@ def make_elm_or_print_err(factoryname, name, printedname):
     print("Creating", printedname)
     elm = Gst.ElementFactory.make(factoryname, name)
     if not elm:
-        sys.stderr.write("Unable to create " + printedname + " \n")
+        print("Unable to create ", printedname, error=True)
         show_troubleshooting()
     return elm
 
@@ -564,7 +564,7 @@ def main(
     pipeline = Gst.Pipeline()
 
     if not pipeline:
-        sys.stderr.write(" Unable to create Pipeline \n")
+        print("Unable to create Pipeline", error=True)
 
     # Two types of camera supported: USB or Raspi
     usbcam_input = USBCAM_PROTOCOL in input_filename
@@ -745,7 +745,7 @@ def main(
         srcpad = source_bin.get_static_pad("src")
     sinkpad = streammux.get_request_pad("sink_0")
     if not srcpad or not sinkpad:
-        sys.stderr.write(" Unable to get file source or mux sink pads \n")
+        print("Unable to get file source or mux sink pads", error=True)
     srcpad.link(sinkpad)
     streammux.link(pgie)
     pgie.link(convert_pre_osd)
@@ -779,7 +779,7 @@ def main(
     # had got all the metadata.
     osdsinkpad = nvosd.get_static_pad("sink")
     if not osdsinkpad:
-        sys.stderr.write(" Unable to get sink pad of nvosd \n")
+        print("Unable to get sink pad of nvosd", error=True)
 
     osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, osd_sink_pad_buffer_probe, 0)
 
@@ -830,10 +830,10 @@ def main(
                     running = False
                 elif t == Gst.MessageType.WARNING:
                     err, debug = message.parse_warning()
-                    console.log(f"[yellow]WARNING[/yellow] {err}: {debug}\n")
+                    print(f"{err}: {debug}", warning=True)
                 elif t == Gst.MessageType.ERROR:
                     err, debug = message.parse_error()
-                    console.log(f"[red]ERROR [/red] {err}: {debug}\n")
+                    print(f"{err}: {debug}", error=True)
                     show_troubleshooting()
                     running = False
             if e_interrupt.is_set():
@@ -855,7 +855,8 @@ def main(
                 total_frames - 1
             )  # Remove first frame as its inference is not counted
             inference_frames = total_frames // (inference_interval + 1)
-            print(f"\n[bold yellow] ---- Profiling ---- [/bold yellow]")
+            print()
+            print(f"[bold yellow] ---- Profiling ---- [/bold yellow]")
             print(
                 f"Inference frames: {inference_frames} | Processed frames: {total_frames}"
             )
@@ -869,7 +870,7 @@ def main(
             )
             if inference_interval != 0:
                 print(
-                    f"[red]WARNING:[/red] skipping inference every interval={inference_interval} frames"
+                    f"[red]NOTE:[/red] skipping inference every interval={inference_interval} frames"
                 )
         if output_filename is not None:
             print(f"Output file saved: [green bold]{output_filename}[/green bold]")

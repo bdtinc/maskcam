@@ -1,6 +1,6 @@
 import os
 import json
-from rich import print
+from prints import print_mqtt as print
 from multiprocessing import Queue
 from typing import Callable, List
 from paho.mqtt import client as paho_mqtt_client
@@ -47,9 +47,11 @@ def mqtt_connect_broker(
             if cb_success is not None:
                 cb_success(client)
             if not mqtt_send_queue(client):
-                print(f"[red]Failed to send MQTT message queue after connecting[/red]")
+                print(
+                    f"Failed to send MQTT message queue after connecting", warning=True
+                )
         else:
-            print(f"[red]Failed to connect to MQTT[/red], return code {code}\n")
+            print(f"Failed to connect to MQTT[/red], return code {code}", warning=True)
 
     def cb_on_disconnect(client, userdata, code):
         print(f"Disconnected from MQTT Broker, code: {code}")
@@ -64,7 +66,7 @@ def mqtt_connect_broker(
 
 def mqtt_send_msg(mqtt_client, topic, message, enqueue=True):
     if mqtt_client is None:
-        print(f"Skipping MQTT message to topic: {topic}")
+        print(f"MQTT not connected. Skipping message to topic: {topic}")
         return False
 
     # Check previous enqueued msgs
@@ -81,7 +83,9 @@ def mqtt_send_msg(mqtt_client, topic, message, enqueue=True):
                 print(f"{topic} | MQTT message [yellow]ENQUEUED[/yellow]")
                 mqtt_msg_queue.put_nowait({"topic": topic, "message": message})
             else:
-                print(f"{topic} | MQTT message [red]DROPPED: FULL QUEUE[/red]")
+                print(
+                    f"{topic} | MQTT message [red]DROPPED: FULL QUEUE[/red]", error=True
+                )
         else:
-            print(f"{topic} | MQTT message [yellow]DISCARDED[/yellow]")
+            print(f"{topic} | MQTT message [yellow]DISCARDED[/yellow]", warning=True)
         return False

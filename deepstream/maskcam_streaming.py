@@ -32,7 +32,7 @@ import threading
 import configparser
 import multiprocessing as mp
 from datetime import datetime
-from rich import print
+from prints import print_streaming as print
 
 gi.require_version("Gst", "1.0")
 gi.require_version("GstRtspServer", "1.0")
@@ -45,7 +45,7 @@ e_interrupt = None
 
 def sigint_handler(sig, frame):
     # This function is not used if e_external_interrupt is provided
-    print("\n[red]Ctrl+C pressed. Interrupting streaming...[/red]")
+    print("[red]Ctrl+C pressed. Interrupting streaming...[/red]")
     e_interrupt.set()
 
 

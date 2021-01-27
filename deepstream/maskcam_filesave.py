@@ -32,7 +32,7 @@ import configparser
 import threading
 import multiprocessing as mp
 from datetime import datetime
-from rich import print
+from prints import print_filesave as print
 
 gi.require_version("Gst", "1.0")
 gi.require_version("GstBase", "1.0")
@@ -52,15 +52,15 @@ def make_elm_or_print_err(factoryname, name, printedname, detail=""):
     print("Creating", printedname)
     elm = Gst.ElementFactory.make(factoryname, name)
     if not elm:
-        sys.stderr.write("Unable to create " + printedname + " \n")
+        print("Unable to create " + printedname, error=True)
         if detail:
-            sys.stderr.write(detail)
+            print(detail)
     return elm
 
 
 def sigint_handler(sig, frame):
     # This function is not used if e_external_interrupt is provided
-    print("\n[red]Ctrl+C pressed. Interrupting file-save...[/red]")
+    print("[red]Ctrl+C pressed. Interrupting file-save...[/red]")
     e_interrupt.set()
 
 
@@ -83,11 +83,11 @@ def main(
 
     # Create gstreamer elements
     # Create Pipeline element that will form a connection of other elements
-    print("\n[green]Creating:[/green] file-saving pipeline UDP->File")
+    print("[green]Creating:[/green] file-saving pipeline UDP->File")
     pipeline = Gst.Pipeline()
 
     if not pipeline:
-        sys.stderr.write(" Unable to create Pipeline \n")
+        print("Unable to create Pipeline", error=True)
 
     udpsrc = make_elm_or_print_err("udpsrc", "udpsrc", "UDP Source")
     udpsrc.set_property("port", udp_port)
@@ -187,10 +187,10 @@ def main(
                 running = False
             elif t == Gst.MessageType.WARNING:
                 err, debug = message.parse_warning()
-                sys.stderr.write("Warning: %s: %s\n" % (err, debug))
+                print("%s: %s" % (err, debug), warning=True)
             elif t == Gst.MessageType.ERROR:
                 err, debug = message.parse_error()
-                sys.stderr.write("Error: %s: %s\n" % (err, debug))
+                print("%s: %s" % (err, debug), error=True)
                 running = False
         if e_interrupt.is_set():
             print("Interruption received. Sending EOS to generate video file.")

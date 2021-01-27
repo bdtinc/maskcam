@@ -5,11 +5,12 @@ import socket
 import configparser
 import threading
 import multiprocessing as mp
+from datetime import datetime
 from http.server import SimpleHTTPRequestHandler
 from socketserver import TCPServer, ThreadingTCPServer
 from common import CONFIG_FILE
 from utils import get_ip_address
-from rich import print
+from prints import print_fileserver as print
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -22,6 +23,7 @@ def start_server(httpd_server):
 
 
 def cb_handle_error(request, client_address):
+    # Not important, happens very often but nothing actually fails
     print(f"Static file server: File request interrupted [client: {client_address}]")
 
 
@@ -57,10 +59,10 @@ def main(config, directory=None, e_external_interrupt: mp.Event = None):
         httpd.server_close()
         s.join(timeout=1)
         if s.is_alive():
-            print("[red]Server thread did not stop[/red]")
+            print("Server thread did not stop", warning=True)
         else:
-            print("[yellow]Server shut down correctly[/yellow]")
-    print(f"Alive threads: {threading.enumerate()}")
+            print("Server shut down correctly")
+    print(f"Server alive threads: {threading.enumerate()}")
 
 
 if __name__ == "__main__":

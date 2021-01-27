@@ -8,8 +8,8 @@ import threading
 import configparser
 import multiprocessing as mp
 
-from rich import print
 from rich.console import Console
+from prints import print_run as print
 from datetime import datetime, timedelta
 
 from common import CONFIG_FILE, USBCAM_PROTOCOL, RASPICAM_PROTOCOL
@@ -48,15 +48,15 @@ from maskcam_streaming import main as streaming_main
 e_interrupt = threading.Event()
 q_commands = mp.Queue(maxsize=4)
 active_filesave_processes = []
-console = Console()
 
 config = configparser.ConfigParser()
 config.read(CONFIG_FILE)
 config.sections()
+console = Console()
 
 
 def sigint_handler(sig, frame):
-    print("\n[red]Ctrl+C pressed. Interrupting all processes...[/red]")
+    print("[red]Ctrl+C pressed. Interrupting all processes...[/red]")
     e_interrupt.set()
 
 
@@ -77,19 +77,22 @@ def start_process(name, target_function, config, **kwargs):
 
 
 def terminate_process(name, process, e_interrupt_process):
-    print(f"\nSending interrupt to {name} process")
+    print(f"Sending interrupt to {name} process")
     e_interrupt_process.set()
     print(f"Waiting for process [yellow]{name}[/yellow] to terminate...")
     process.join(timeout=10)
     if process.is_alive():
-        print(f"[red]Forcing termination of process:[/red] [bold]{name}[/bold]")
+        print(
+            f"[red]Forcing termination of process:[/red] [bold]{name}[/bold]",
+            warning=True,
+        )
         process.terminate()
     print(f"Process terminated: [yellow]{name}[/yellow]\n")
 
 
 def new_command(command):
     if q_commands.full():
-        console.log(f"[red]Command {command} IGNORED[/red]. Queue is full.")
+        print(f"Command {command} IGNORED. Queue is full.", error=True)
         return
     print(f"Received command: [yellow]{command}[/yellow]")
     q_commands.put_nowait(command)
@@ -98,12 +101,13 @@ def new_command(command):
 def mqtt_init(config):
     if MQTT_BROKER_IP is None or MQTT_DEVICE_NAME is None:
         print(
-            "\n[red]MQTT is DISABLED[/red]"
-            " since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n"
+            "[red]MQTT is DISABLED[/red]"
+            " since MQTT_BROKER_IP or MQTT_DEVICE_NAME env vars are not defined\n",
+            warning=True,
         )
         mqtt_client = None
     else:
-        print(f"\nConnecting to MQTT server {MQTT_BROKER_IP}:{MQTT_BROKER_PORT}")
+        print(f"Connecting to MQTT server {MQTT_BROKER_IP}:{MQTT_BROKER_PORT}")
         print(f"Device name: [green]{MQTT_DEVICE_NAME}[/green]\n\n")
         mqtt_client = mqtt_connect_broker(
             client_id=MQTT_DEVICE_NAME,
@@ -223,7 +227,7 @@ def handle_file_saving(
 
     # Start new file-saving process if time has elapsed
     if latest_start is None or (datetime.now() - latest_start >= period):
-        console.log(
+        print(
             "[green]Time to start a new video file [/green]"
             f" [latest started at: {latest_start}]"
         )
@@ -412,7 +416,7 @@ if __name__ == "__main__":
                 elif command == CMD_FILE_SAVE:
                     flag_keep_current_files()
                 else:
-                    print("[red]Command not recognized[/red]")
+                    print("[red]Command not recognized[/red]", error=True)
             else:
                 e_interrupt.wait(timeout=0.1)
 
