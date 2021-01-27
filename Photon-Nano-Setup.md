@@ -32,7 +32,7 @@ Plug an Ethernet cable into both the host PC and the Photon Nano. Open SDK Manag
   <img src="https://connecttech.com/wp-content/uploads/2019/09/sdk_components_agx_4.2.1_step2_edited-1024x640.png">
 </p>
 
-A window will open asking to enter the IP address, username, and password for the Photon Nano. You can check the Nano's IP address by opening a terminal on the Photon Nano and issuing `ifconfig`. (The default IP address is 192.168.1.119.) Enter the IP address, username, and password, then click "Flash". This will install the selected SDK Components over an SSH connection. The process takes about 30 minutes. Reboot the Photon Nano after it's finished.
+A window will open asking to enter the IP address, username, and password for the Photon Nano. You can check the Nano's IP address by opening a terminal on the Photon Nano and issuing `ifconfig`. (The default IP address is 192.168.1.119.) Enter the IP address, username, and password, then click "Flash". This will install the selected SDK Components over an SSH connection. The process takes about 30 minutes. 
 
 This leaves the Nano with very little storage space left. Free up more storage space by removing samples directories for Deepstream, CUDA, and other packages. On the Photon Nano, open a terminal and issue:
 
@@ -40,8 +40,9 @@ This leaves the Nano with very little storage space left. Free up more storage s
 sudo rm -rf /opt/nvidia/deepstream/deepstream-5.0/samples
 sudo rm -rf /usr/local/cuda-10.2/samples
 sudo rm -rf ~/VisionWorks-SFM-0.90-Samples
-
 ```
+
+Reboot the Photon Nano to clear out temporary storage caches.
 
 ### 4. Update NVIDIA apt sources list and install pip3
 Open the NVIDIA apt sources list using `sudo gedit /etc/apt/sources.list.d/nvidia-l4t-apt-source.list` . Remove the "#" in front of each line so it looks like this:
