@@ -8,7 +8,6 @@ ipdb
 
 # General deps
 Cython
-scikit-learn
 numpy
 scipy
 PyYAML
@@ -21,4 +20,5 @@ paho-mqtt
 # torchvision
 
 # Tracker & video pipeline. Exclude it on Jetson (see README)
-# norfair
+norfair
+filterpy

@@ -9,36 +9,36 @@ import configparser
 import multiprocessing as mp
 
 from rich.console import Console
-from prints import print_run as print
 from datetime import datetime, timedelta
 
-from common import CONFIG_FILE, USBCAM_PROTOCOL, RASPICAM_PROTOCOL
-from common import (
+from maskcam.prints import print_run as print
+from maskcam.common import CONFIG_FILE, USBCAM_PROTOCOL, RASPICAM_PROTOCOL
+from maskcam.common import (
     CMD_FILE_SAVE,
     CMD_STREAMING_START,
     CMD_STREAMING_STOP,
     CMD_INFERENCE_RESTART,
     CMD_FILESERVER_RESTART,
 )
-from utils import get_ip_address
-from mqtt_common import mqtt_connect_broker, mqtt_send_msg
-from mqtt_common import (
+from maskcam.utils import get_ip_address
+from maskcam.mqtt_common import mqtt_connect_broker, mqtt_send_msg
+from maskcam.mqtt_common import (
     MQTT_BROKER_IP,
     MQTT_BROKER_PORT,
     MQTT_DEVICE_DESCRIPTION,
     MQTT_DEVICE_NAME,
 )
-from mqtt_common import (
+from maskcam.mqtt_common import (
     MQTT_TOPIC_ALERTS,
     MQTT_TOPIC_FILES,
     MQTT_TOPIC_HELLO,
     MQTT_TOPIC_STATS,
     MQTT_TOPIC_COMMANDS,
 )
-from maskcam_inference import main as inference_main
-from maskcam_filesave import main as filesave_main
-from maskcam_fileserver import main as fileserver_main
-from maskcam_streaming import main as streaming_main
+from maskcam.maskcam_inference import main as inference_main
+from maskcam.maskcam_filesave import main as filesave_main
+from maskcam.maskcam_fileserver import main as fileserver_main
+from maskcam.maskcam_streaming import main as streaming_main
 
 
 # mp.set_start_method("spawn")

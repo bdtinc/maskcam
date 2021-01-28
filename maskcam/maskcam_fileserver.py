@@ -8,9 +8,10 @@ import multiprocessing as mp
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler
 from socketserver import TCPServer, ThreadingTCPServer
-from common import CONFIG_FILE
-from utils import get_ip_address
-from prints import print_fileserver as print
+
+from .common import CONFIG_FILE
+from .utils import get_ip_address
+from .prints import print_fileserver as print
 
 
 class Handler(SimpleHTTPRequestHandler):
