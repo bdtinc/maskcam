@@ -519,6 +519,7 @@ def main(
     inference_interval = int(config["property"]["interval"])
 
     camera_framerate = config["maskcam"]["camera-framerate"]  # e.g: 10/1, 15/1
+    camera_flip_method = int(config["maskcam"]["camera-flip-method"])
 
     # Input camera configuration
     # Use ./gst_capabilities.sh to get the list of available capabilities from /dev/video0
@@ -573,6 +574,8 @@ def main(
         nvvidconvsrc = make_elm_or_print_err(
             "nvvideoconvert", "convertor_src2", "Convertor src 2"
         )
+        if camera_flip_method:
+            nvvidconvsrc.set_property("flip-method", camera_flip_method)
         caps_vidconvsrc = make_elm_or_print_err(
             "capsfilter", "nvmm_caps", "NVMM caps for input stream"
         )

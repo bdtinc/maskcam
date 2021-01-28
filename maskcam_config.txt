@@ -3,6 +3,7 @@ default-input=v4l2:///dev/video0
 
 # Run utils/gst_capabilities.sh and find some combination with framerate <= 14 fps
 camera-framerate=10/1
+camera-flip-method=0
 
 # Statistics and alerts
 alert-min-visible-people=1
