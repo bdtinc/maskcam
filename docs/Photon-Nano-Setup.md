@@ -137,7 +137,7 @@ sudo python3 setup.py install
 ### 9. Compile YOLO v4 plugin for Deepstream
 Move into the MaskCam folder and build the YOLO v4 Deepstream plugin using:
 ```
-cd /media/evan/MaskCam-SD/MaskCam/bdti-jetson/deepstream/plugin_yolov4/nvdsinfer_custom_impl_Yolo
+cd /media/evan/MaskCam-SD/MaskCam/bdti-jetson/deepstream/deepstream_plugin_yolov4
 export CUDA_VER=10.2
 make
 ```
@@ -147,18 +147,20 @@ If the make command completes successfully, a libnvdsinfer_custom_impl_Yolo.so f
 ### 10. Run MaskCam!!
 We're ready to run the MaskCam program! First, make sure to plug in a USB camera. Move to the MaskCam directory and run it using:
 ```
-cd /media/evan/MaskCam-SD/MaskCam/bdti-jetson/deepstream
-python3 maskcam_inference.py &
+cd /media/evan/MaskCam-SD/MaskCam/bdti-jetson
+python3 -m maskcam.maskcam_inference
 ```
-After the program has initialized and started printing "Processed XX frames...", run the video recording program using: 
+After the program has initialized and started printing "Processed XX frames...", open a new terminal and run the video recording program using: 
 
 ```
-python3 maskcam_filesave.py
+python3 -m maskcam.maskcam_filesave
 ```
 
-The program will access the webcam, process about 15 seconds of video, save it to a file in /dev/sh, and close the webcam. The maskcam_inference.py program continues running, so kill it using:
+The program will access the webcam, process about 15 seconds of video, save it to a file in /dev/sh, and close the webcam. The maskcam_run.py program continues running, so kill it using:
 ```
 kill %1
 ```
+
+For other options to run MaskCam, see the end of the [Running on Jetson Nano Developer Kit](https://github.com/tryolabs/bdti-jetson#running-on-jetson-nano-developer-kit) section on the main page.
 
 That's it! MaskCam is all set up on the Photon Nano.
