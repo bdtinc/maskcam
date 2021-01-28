@@ -105,6 +105,11 @@ git clone git@github.com:tryolabs/norfair.git
 git clone git@github.com:rlabbe/filterpy.git
 ```
 
+Add the norfair and filterpy directories to PYTHONPATH using:
+```
+export PYTHONPATH=/media/evan/MaskCam-SD/MaskCam/norfair:/media/evan/MaskCam-SD/MaskCam/filterpy
+```
+
 Download the YOLO TensorRT engine file from [here](https://drive.google.com/file/d/1Qb6f2VNXE15EgIi6roebgSo8XZuAPQxi/view?usp=sharing), and move the `facemask_y4tiny_1024_608_fp16.trt` file into the `bdti-jetson/yolo` folder.
 
 ### 8. Install GStreamer and Deepstream Python bindings
@@ -148,19 +153,9 @@ If the make command completes successfully, a libnvdsinfer_custom_impl_Yolo.so f
 We're ready to run the MaskCam program! First, make sure to plug in a USB camera. Move to the MaskCam directory and run it using:
 ```
 cd /media/evan/MaskCam-SD/MaskCam/bdti-jetson
-python3 -m maskcam.maskcam_inference
-```
-After the program has initialized and started printing "Processed XX frames...", open a new terminal and run the video recording program using: 
-
-```
-python3 -m maskcam.maskcam_filesave
+python3 maskcam_run.py
 ```
 
-The program will access the webcam, process about 15 seconds of video, save it to a file in /dev/sh, and close the webcam. The maskcam_run.py program continues running, so kill it using:
-```
-kill %1
-```
-
-For other options to run MaskCam, see the end of the [Running on Jetson Nano Developer Kit](https://github.com/tryolabs/bdti-jetson#running-on-jetson-nano-developer-kit) section on the main page.
+For other options to run MaskCam, see the end of the [Running MaskCam standalone services](https://github.com/tryolabs/bdti-jetson#running-maskcam-standalone-services) section on the main page.
 
 That's it! MaskCam is all set up on the Photon Nano.
