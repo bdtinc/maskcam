@@ -54,7 +54,7 @@ deb https://repo.download.nvidia.com/jetson/<platform> r32.4 main
 
 Save and exit the file. Then, issue `sudo apt update` to update the package list. Install pip3 using:
 ```
-sudo apt get python3-pip
+sudo apt install python3-pip
 ```
 
 ### 5. Mount SD card-based drive
@@ -80,9 +80,11 @@ ln -s /media/evan/MaskCam-SD/site-packages-local ~/.local/lib/python3.6/site-pac
 
 Now, all user Python libraries that are added with the `pip3` command will be installed to the site-packages-local folder on the SD card.
 
-Install the Python libraries required for MaskCam using:
+Install the Python libraries required for MaskCam using the commands below. Installations are split into separate commands, because if all packages are installed at once, the Nano will run out of cache space.
 ```
-pip3 install pip-tools black flake8 jupyter ipython ipdb Cython scikit-learn numpy scipy PyYAML rich paho-mqtt
+pip3 install pip-tools black flake8 jupyter ipython
+pip3 install ipdb Cython numpy scipy PyYAML rich paho-mqtt
+pip3 install scikit-learn 
 ```
 
 Installing the libraries takes around 30 minutes. There may be errors from installing jupyter, scikit-learn, and scipy, but these can be ignored.
@@ -91,7 +93,7 @@ Installing the libraries takes around 30 minutes. There may be errors from insta
 On the Photon Nano, create a MaskCam folder inside the mounted SD card and cd into it.
 
 ```
-mkdir /media/evan/MaskCam-SD
+mkdir /media/evan/MaskCam-SD/MaskCam
 cd /media/evan/MaskCam-SD/MaskCam
 ```
 
@@ -103,10 +105,7 @@ git clone git@github.com:tryolabs/norfair.git
 git clone git@github.com:rlabbe/filterpy.git
 ```
 
-Add filterpy and norfair to PYTHONPATH using:
-```
-export PYTHONPATH=/media/evan/MaskCam-SD/MaskCam/filterpy:/media/evan/MaskCam-SD/MaskCam/norfair
-```
+Download the YOLO TensorRT engine file from [here](https://drive.google.com/file/d/1Qb6f2VNXE15EgIi6roebgSo8XZuAPQxi/view?usp=sharing), and move the `facemask_y4tiny_1024_608_fp16.trt` file into the `bdti-jetson/yolo` folder.
 
 ### 8. Install GStreamer and Deepstream Python bindings
 Most of the GStreamer packages are pre-installed on this image, but there are a couple other packages to be installed. Install the GStreamer RTSP library and then reinstall the V4L2 GStreamer plugin using:
