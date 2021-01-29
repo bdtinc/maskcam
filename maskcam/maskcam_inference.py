@@ -561,7 +561,11 @@ def main(
             source = make_elm_or_print_err(
                 "nvarguscamerasrc", "nv-argus-camera-source", "RaspiCam input"
             )
-            source.set_property("sensor-id", input_device)
+            source.set_property("sensor-id", int(input_device))
+            source.set_property("bufapi-version", 1)
+            
+            # Special camera_capabilities for raspicam
+            camera_capabilities = f"video/x-raw(memory:NVMM),width=1920,height=1080,framerate=10/1"
 
         # Misterious converting sequence from deepstream_test_1_usb.py
         caps_camera = make_elm_or_print_err(
