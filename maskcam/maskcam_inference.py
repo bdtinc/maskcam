@@ -49,7 +49,7 @@ e_interrupt = None
 
 
 class FaceMask:
-    def __init__(self, th_detection, th_vote, min_face_size):
+    def __init__(self, th_detection, th_vote, min_face_size, disable_tracker=False):
         self.people_votes = {}
         self.current_people = set()
         self.th_detection = th_detection
@@ -61,10 +61,43 @@ class FaceMask:
         self.color_mask = (0.0, 1.0, 0.0)  # green
         self.color_no_mask = (1.0, 0.0, 0.0)  # red
         self.color_unknown = (1.0, 1.0, 0.0)  # yellow
-        self.draw_raw_detections = False
-        self.draw_tracked_people = True
-        self.tracker_enabled = True
+        self.draw_raw_detections = disable_tracker
+        self.draw_tracked_people = not disable_tracker
         self.stats_lock = threading.Lock()
+
+        # Norfair Tracker
+        if disable_tracker:
+            self.tracker = None
+        else:
+            self.tracker = Tracker(
+                distance_function=self.keypoints_distance,
+                detection_threshold=self.th_detection,
+                distance_threshold=1,
+                point_transience=8,
+                hit_inertia_min=25,
+                hit_inertia_max=60,
+            )
+
+    def keypoints_distance(self, detected_pose, tracked_pose):
+        detected_points = detected_pose.points
+        estimated_pose = tracked_pose.estimate
+        min_box_size = min(
+            max(
+                detected_points[1][0] - detected_points[0][0],  # x2 - x1
+                detected_points[1][1] - detected_points[0][1],  # y2 - y1
+                1,
+            ),
+            max(
+                estimated_pose[1][0] - estimated_pose[0][0],  # x2 - x1
+                estimated_pose[1][1] - estimated_pose[0][1],  # y2 - y1
+                1,
+            ),
+        )
+        mean_distance_normalized = (
+            np.mean(np.linalg.norm(detected_points - estimated_pose, axis=1))
+            / min_box_size
+        )
+        return mean_distance_normalized
 
     def validate_detection(self, box_points, score, label):
         if self.disable_detection_validation:
@@ -134,38 +167,7 @@ class FaceMask:
         return total_people, total_classified, total_mask
 
 
-def keypoints_distance(detected_pose, tracked_pose):
-    detected_points = detected_pose.points
-    estimated_pose = tracked_pose.estimate
-    min_box_size = min(
-        max(
-            detected_points[1][0] - detected_points[0][0],  # x2 - x1
-            detected_points[1][1] - detected_points[0][1],  # y2 - y1
-            1,
-        ),
-        max(
-            estimated_pose[1][0] - estimated_pose[0][0],  # x2 - x1
-            estimated_pose[1][1] - estimated_pose[0][1],  # y2 - y1
-            1,
-        ),
-    )
-    mean_distance_normalized = (
-        np.mean(np.linalg.norm(detected_points - estimated_pose, axis=1)) / min_box_size
-    )
-    return mean_distance_normalized
-
-
-face_mask = FaceMask(0.1, 0.4, 0)
-
-# In Norfair we trust
-tracker = Tracker(
-    distance_function=keypoints_distance,
-    detection_threshold=face_mask.th_detection,
-    distance_threshold=1,
-    point_transience=8,
-    hit_inertia_min=25,
-    hit_inertia_max=60,
-)
+face_mask = FaceMask(0.1, 0.4, 0, disable_tracker=False)
 
 
 def cb_add_statistics(cb_args):
@@ -317,9 +319,9 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
         # Each meta object carries max 16 rects/labels/etc.
         max_drawings_per_meta = 16  # This is hardcoded, not documented
 
-        if face_mask.tracker_enabled:
+        if face_mask.tracker is not None:
             # Track, count and draw tracked people
-            tracked_people = tracker.update(detections)
+            tracked_people = face_mask.tracker.update(detections)
             # Filter out people with no live points (don't draw)
             drawn_people = [
                 person for person in tracked_people if person.live_points.any()
@@ -665,7 +667,9 @@ def main(
 
     # UDP streaming
     queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
-    multiudpsink = make_elm_or_print_err("multiudpsink", "multi udpsink", "Multi UDP Sink")
+    multiudpsink = make_elm_or_print_err(
+        "multiudpsink", "multi udpsink", "Multi UDP Sink"
+    )
     # udpsink.set_property("host", "127.0.0.1")
     # udpsink.set_property("port", udp_port)
 

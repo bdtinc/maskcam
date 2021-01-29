@@ -186,20 +186,20 @@ def is_alert_condition(statistics, config):
     return is_alert
 
 
-def handle_statistics(mqtt_client, stats_queue, config):
+def handle_statistics(mqtt_client, stats_queue, config, is_live_input):
     while not stats_queue.empty():
         statistics = stats_queue.get_nowait()
 
-        # Alert conditions detection
-        raise_alert = is_alert_condition(statistics, config)
-        if raise_alert:
-            flag_keep_current_files()
+        if is_live_input:
+            # Alert conditions detection
+            raise_alert = is_alert_condition(statistics, config)
+            if raise_alert:
+                flag_keep_current_files()
 
-        if mqtt_client is not None:
-            topic = MQTT_TOPIC_ALERTS if raise_alert else MQTT_TOPIC_STATS
-            message = {"device_id": MQTT_DEVICE_NAME, **statistics}
-            mqtt_send_msg(mqtt_client, topic, message, enqueue=True)
-
+            if mqtt_client is not None:
+                topic = MQTT_TOPIC_ALERTS if raise_alert else MQTT_TOPIC_STATS
+                message = {"device_id": MQTT_DEVICE_NAME, **statistics}
+                mqtt_send_msg(mqtt_client, topic, message, enqueue=True)
 
 
 def allocate_free_udp_port():
@@ -384,7 +384,7 @@ if __name__ == "__main__":
 
         while not e_interrupt.is_set():
             # Send MQTT statistics, detect alarm events and request file-saving
-            handle_statistics(mqtt_client, stats_queue, config)
+            handle_statistics(mqtt_client, stats_queue, config, is_live_input)
 
             # Handle sequential file saving processes
             if fileserver_enabled and is_live_input:  # server can be enabled via MQTT
