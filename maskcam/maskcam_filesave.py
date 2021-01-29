@@ -45,11 +45,11 @@ def sigint_handler(sig, frame):
 def main(
     config: dict,
     output_filename: str,
+    udp_port: int,
     e_external_interrupt: mp.Event = None,
 ):
     global e_interrupt
 
-    udp_port = int(config["maskcam"]["udp-port-filesave"])
     codec = config["maskcam"]["codec"]
     streaming_clock_rate = int(config["maskcam"]["streaming-clock-rate"])
 
@@ -61,7 +61,10 @@ def main(
 
     # Create gstreamer elements
     # Create Pipeline element that will form a connection of other elements
-    print("[green]Creating:[/green] file-saving pipeline UDP->File")
+    print(
+        "[green]Creating:[/green] file-saving pipeline "
+        f"UDP(port:{udp_port})->File({output_filename})"
+    )
     pipeline = Gst.Pipeline()
 
     if not pipeline:
@@ -187,13 +190,20 @@ if __name__ == "__main__":
     config.sections()
 
     # Check arguments
+    output_filename = None
+    udp_port = None
     if len(sys.argv) > 1:
         output_filename = sys.argv[1]
-    else:
+    if len(sys.argv) > 2:
+        udp_port = int(sys.argv[2])
+
+    if not output_filename:
         output_dir = config["maskcam"]["fileserver-hdd-dir"]
         output_filename = (
             f"{output_dir}/{datetime.today().strftime('%Y%m%d_%H%M%S')}.mp4"
         )
+    if not udp_port:  # Use first listed in config
+        udp_port = int(config["maskcam"]["udp-ports-filesave"].split(",")[0])
     print(f"Output file: {output_filename}")
 
-    sys.exit(main(config=config, output_filename=output_filename))
+    sys.exit(main(config=config, output_filename=output_filename, udp_port=udp_port))

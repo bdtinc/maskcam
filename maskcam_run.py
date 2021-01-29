@@ -22,7 +22,7 @@ from maskcam.common import (
     CMD_INFERENCE_RESTART,
     CMD_FILESERVER_RESTART,
 )
-from maskcam.utils import get_ip_address
+from maskcam.utils import get_ip_address, load_udp_ports_filesaving
 from maskcam.mqtt_common import mqtt_connect_broker, mqtt_send_msg
 from maskcam.mqtt_common import (
     MQTT_BROKER_IP,
@@ -43,16 +43,16 @@ from maskcam.maskcam_fileserver import main as fileserver_main
 from maskcam.maskcam_streaming import main as streaming_main
 
 
-# Use threading instead of mp.Event() for sigint_handler, see:
+config = configparser.ConfigParser()
+config.read(CONFIG_FILE)
+config.sections()
+udp_ports_pool = set()
+console = Console()
+# Use threading.Event instead of mp.Event() for sigint_handler, see:
 # https://bugs.python.org/issue41606
 e_interrupt = threading.Event()
 q_commands = mp.Queue(maxsize=4)
 active_filesave_processes = []
-
-config = configparser.ConfigParser()
-config.read(CONFIG_FILE)
-config.sections()
-console = Console()
 
 
 def sigint_handler(sig, frame):
@@ -201,6 +201,18 @@ def handle_statistics(mqtt_client, stats_queue, config):
             mqtt_send_msg(mqtt_client, topic, message, enqueue=True)
 
 
+
+def allocate_free_udp_port():
+    new_port = udp_ports_pool.pop()
+    print(f"Allocating UDP port: {new_port}")
+    return new_port
+
+
+def release_udp_port(port_number):
+    print(f"Releasing UDP port: {port_number}")
+    udp_ports_pool.add(port_number)
+
+
 def handle_file_saving(
     video_period, video_duration, ram_dir, hdd_dir, force_save, mqtt_client=None
 ):
@@ -237,8 +249,13 @@ def handle_file_saving(
             f"{datetime.today().strftime('%Y%m%d_%H%M%S')}_{new_process_number}.mp4"
         )
         new_filepath = f"{ram_dir}/{new_filename}"
+        new_udp_port = allocate_free_udp_port()
         process_handler, e_interrupt_process = start_process(
-            new_process_name, filesave_main, config, output_filename=new_filepath
+            new_process_name,
+            filesave_main,
+            config,
+            output_filename=new_filepath,
+            udp_port=new_udp_port,
         )
         active_filesave_processes.append(
             dict(
@@ -250,6 +267,7 @@ def handle_file_saving(
                 process_handler=process_handler,
                 e_interrupt=e_interrupt_process,
                 flag_keep_file=False,
+                udp_port=new_udp_port,
             )
         )
 
@@ -260,6 +278,7 @@ def finish_filesave_process(active_process, hdd_dir, force_filesave, mqtt_client
         active_process["process_handler"],
         active_process["e_interrupt"],
     )
+    release_udp_port(active_process["udp_port"])
 
     # Move file to its definitive place if flagged, otherwise remove it
     if active_process["flag_keep_file"] or force_filesave:
@@ -324,6 +343,9 @@ if __name__ == "__main__":
         fileserver_force_save = int(config["maskcam"]["fileserver-force-save"])
         fileserver_ram_dir = config["maskcam"]["fileserver-ram-dir"]
         fileserver_hdd_dir = config["maskcam"]["fileserver-hdd-dir"]
+
+        # Filesave processes: load available ports
+        load_udp_ports_filesaving(config, udp_ports_pool)
 
         # Should only have 1 element at a time unless this thread gets blocked
         stats_queue = mp.Queue(maxsize=5)

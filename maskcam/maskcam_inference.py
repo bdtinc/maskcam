@@ -29,7 +29,7 @@ from .common import (
     RASPICAM_PROTOCOL,
     CONFIG_FILE,
 )
-from .utils import glib_cb_restart
+from .utils import glib_cb_restart, load_udp_ports_filesaving
 
 
 # YOLO labels. See obj.names file
@@ -513,8 +513,10 @@ def main(
     global end_time
     global e_interrupt
 
-    udp_port_filesave = int(config["maskcam"]["udp-port-filesave"])
-    udp_port_streaming = int(config["maskcam"]["udp-port-streaming"])
+    # Load all udp ports to output video
+    udp_ports = {int(config["maskcam"]["udp-port-streaming"])}
+    load_udp_ports_filesaving(config, udp_ports)
+
     codec = config["maskcam"]["codec"]
     stats_period = int(config["maskcam"]["statistics-period"])
     inference_interval = int(config["property"]["interval"])
@@ -663,15 +665,16 @@ def main(
 
     # UDP streaming
     queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
-    udpsink = make_elm_or_print_err("multiudpsink", "multi udpsink", "Multi UDP Sink")
+    multiudpsink = make_elm_or_print_err("multiudpsink", "multi udpsink", "Multi UDP Sink")
     # udpsink.set_property("host", "127.0.0.1")
     # udpsink.set_property("port", udp_port)
-    udpsink.set_property(
-        "clients", f"127.0.0.1:{udp_port_filesave},127.0.0.1:{udp_port_streaming}"
-    )
 
-    udpsink.set_property("async", False)
-    udpsink.set_property("sync", True)
+    # Comma separated list of clients, don't add spaces :S
+    client_list = [f"127.0.0.1:{udp_port}" for udp_port in udp_ports]
+    multiudpsink.set_property("clients", ",".join(client_list))
+
+    multiudpsink.set_property("async", False)
+    multiudpsink.set_property("sync", True)
 
     if output_filename is not None:
         queue_file = make_elm_or_print_err("queue", "queue_file", "File save queue")
@@ -713,7 +716,7 @@ def main(
     # Output to UDP
     pipeline.add(queue_udp)
     pipeline.add(rtppay)
-    pipeline.add(udpsink)
+    pipeline.add(multiudpsink)
 
     print("Linking elements in the Pipeline \n")
 
@@ -755,7 +758,7 @@ def main(
     # Output to UDP
     tee_udp.link(queue_udp.get_static_pad("sink"))
     queue_udp.link(rtppay)
-    rtppay.link(udpsink)
+    rtppay.link(multiudpsink)
 
     # Lets add probe to get informed of the meta data generated, we add probe to
     # the sink pad of the osd element, since by that time, the buffer would have
@@ -823,7 +826,7 @@ def main(
                 # Send EOS to container to generate a valid mp4 file
                 if output_filename is not None:
                     container.send_event(Gst.Event.new_eos())
-                    udpsink.send_event(Gst.Event.new_eos())
+                    multiudpsink.send_event(Gst.Event.new_eos())
                 else:
                     pipeline.send_event(Gst.Event.new_eos())  # fakesink EOS won't work
 
