@@ -513,7 +513,8 @@ def main(
     global end_time
     global e_interrupt
 
-    udp_port = int(config["maskcam"]["udp-port"])
+    udp_port_filesave = int(config["maskcam"]["udp-port-filesave"])
+    udp_port_streaming = int(config["maskcam"]["udp-port-streaming"])
     codec = config["maskcam"]["codec"]
     stats_period = int(config["maskcam"]["statistics-period"])
     inference_interval = int(config["property"]["interval"])
@@ -662,9 +663,13 @@ def main(
 
     # UDP streaming
     queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
-    udpsink = make_elm_or_print_err("udpsink", "udpsink", "UDP Sink")
-    udpsink.set_property("host", "127.0.0.1")
-    udpsink.set_property("port", udp_port)
+    udpsink = make_elm_or_print_err("multiudpsink", "multi udpsink", "Multi UDP Sink")
+    # udpsink.set_property("host", "127.0.0.1")
+    # udpsink.set_property("port", udp_port)
+    udpsink.set_property(
+        "clients", f"127.0.0.1:{udp_port_filesave},127.0.0.1:{udp_port_streaming}"
+    )
+
     udpsink.set_property("async", False)
     udpsink.set_property("sync", True)
 

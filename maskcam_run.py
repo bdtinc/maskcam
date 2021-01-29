@@ -8,6 +8,8 @@ import threading
 import configparser
 import multiprocessing as mp
 
+# mp.set_start_method("spawn")  # noqa
+
 from rich.console import Console
 from datetime import datetime, timedelta
 
@@ -40,8 +42,6 @@ from maskcam.maskcam_filesave import main as filesave_main
 from maskcam.maskcam_fileserver import main as fileserver_main
 from maskcam.maskcam_streaming import main as streaming_main
 
-
-# mp.set_start_method("spawn")
 
 # Use threading instead of mp.Event() for sigint_handler, see:
 # https://bugs.python.org/issue41606

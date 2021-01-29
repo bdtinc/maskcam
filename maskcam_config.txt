@@ -12,7 +12,8 @@ alert-no-mask-fraction=0.25
 # This must be smaller than fileserver-video-period so that alerts save the right video
 statistics-period=15
 
-udp-port=5400
+udp-port-filesave=5401
+udp-port-streaming=5400
 streaming-port=8554
 streaming-clock-rate=90000
 # Supported: MP4, H264, H265

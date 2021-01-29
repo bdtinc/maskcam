@@ -49,7 +49,7 @@ def main(
 ):
     global e_interrupt
 
-    udp_port = int(config["maskcam"]["udp-port"])
+    udp_port = int(config["maskcam"]["udp-port-filesave"])
     codec = config["maskcam"]["codec"]
     streaming_clock_rate = int(config["maskcam"]["streaming-clock-rate"])
 

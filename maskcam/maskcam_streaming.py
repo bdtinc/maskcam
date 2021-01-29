@@ -28,7 +28,7 @@ def sigint_handler(sig, frame):
 
 def main(config, e_external_interrupt: mp.Event = None):
     global e_interrupt
-    udp_port = int(config["maskcam"]["udp-port"])
+    udp_port = int(config["maskcam"]["udp-port-streaming"])
     codec = config["maskcam"]["codec"]
     # Streaming address: rtsp://<jetson-ip>:<rtsp-port>/<rtsp-address>
     rtsp_streaming_port = int(config["maskcam"]["streaming-port"])
