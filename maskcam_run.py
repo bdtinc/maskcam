@@ -195,6 +195,7 @@ def mqtt_send_device_status(mqtt_client):
             "fileserver_runtime": format_tdelta(fileserver_runtime),
             "streaming_address": streaming_address,
             "save_current_files": f"{keep_n}/{total_fsave}",
+            "time": f"{t_now:%H:%M:%S}",
         },
         enqueue=False,  # Only latest status is interesting
     )

@@ -88,14 +88,28 @@ def display_device(state):
             "Seems that something went wrong while getting the device information, please select another device."
         )
     else:
-        st.header("General information")
-        st.markdown(f'**Id:** {device["id"]}')
-        st.markdown(f'**Description:** {device["description"]}')
-        mqtt_status = st.empty()
+        st.header(f"Device: {device['id']}")
 
         if state.mqtt_last_status:
-            mqtt_display_device_status(mqtt_status)
-        elif state.mqtt_status:
+            status = state.mqtt_last_status # shortcut
+            device_status = st.beta_container()
+            col1, col2 = device_status.beta_columns(2)
+            col1.write("🟢 Device connected "
+                        f"*(Last update: {status['time']})*")
+            if not status['streaming_address'] or status['streaming_address'] == "N/A":
+                col2.write(f":red_circle: Streaming is stopped")
+            else:
+                col2.write(f"🟢 <a href=\"{status['streaming_address']}\" target=\"_blank\">"
+                        "Streaming enabled</a>",
+                        unsafe_allow_html=True)
+            device_status.write(
+                f"**Save videos: {status['save_current_files']}**"
+                f" | *Inference runtime: {status['inference_runtime']}*"
+                f" | *Fileserver runtime: {status['fileserver_runtime']}*"
+            )
+
+        mqtt_status = st.empty()  # Might be changed in real time during connection
+        if state.mqtt_status and not state.mqtt_last_status:
             mqtt_set_status(mqtt_status, state.mqtt_status)
 
 
@@ -175,20 +189,8 @@ def display_device(state):
 
 def mqtt_set_status(mqtt_status, text):
     state.mqtt_status = text
+    mqtt_status.empty()
     mqtt_status.markdown(f"**MQTT status:** {text}")
-
-def mqtt_display_device_status(mqtt_status):
-    if state.mqtt_last_status:
-        status = state.mqtt_last_status
-        with mqtt_status.beta_container():
-            st.markdown("**Device status:**")
-            if not status['streaming_address'] or status['streaming_address'] == "N/A":
-                st.markdown(f"- Streaming is stopped")
-            else:
-                st.markdown(f"- Streaming address: <{status['streaming_address']}>")
-            st.markdown(f"- Save current video chunks: {status['save_current_files']}")
-            st.markdown(f"- Inference runtime: {status['inference_runtime']}")
-            st.markdown(f"- Fileserver runtime: {status['fileserver_runtime']}")
 
 def _on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -260,26 +262,24 @@ def send_mqtt_message_wait_response(topic, message, mqtt_status):
                 timeout -= 1
 
             if msg_info.is_published():
-                mqtt_set_status(mqtt_status, "Message sent. Awaiting response...")
+                mqtt_set_status(mqtt_status, ":clock3: Waiting device response...")
                 retry_publish = 0  # Success: exit retry loop
             elif msg_info.rc:
                 state.mqtt_connected = False
-                mqtt_set_status(mqtt_status, "Reconnecting...")
+                mqtt_set_status(mqtt_status, ":clock3: Reconnecting...")
                 client.reconnect()
                 mqtt_wait_connection(client, 5)
 
         if not msg_info.is_published():
-            mqtt_set_status(mqtt_status, "Message failed")
+            mqtt_set_status(mqtt_status, ":o: Message failed")
             return
 
         mqtt_wait_response(client, 5)
-        if state.mqtt_last_status:
-            mqtt_display_device_status(mqtt_status)
-        else:
-            mqtt_set_status(mqtt_status, "Device not responding")
+        if not state.mqtt_last_status:
+            mqtt_set_status(mqtt_status, ":red_circle: Device not responding")
         
     except Exception as e:
-        mqtt_set_status(mqtt_status, f"Could not connect to MQTT broker: {e}")
+        mqtt_set_status(mqtt_status, f":red_circle: Could not connect to MQTT broker: {e}")
 
 
 def send_mqtt_command(device_id, command, mqtt_status):
@@ -290,7 +290,7 @@ def send_mqtt_command(device_id, command, mqtt_status):
 def main():
     st.set_page_config(page_title="Maskcam")
 
-    st.title("MaskCam device")
+    st.title("MaskCam dashboard")
     all_devices = get_devices()
     display_sidebar(all_devices, state)
 
