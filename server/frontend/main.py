@@ -109,8 +109,12 @@ def display_device(state):
             )
 
         mqtt_status = st.empty()  # Might be changed in real time during connection
-        if state.mqtt_status and not state.mqtt_last_status:
-            mqtt_set_status(mqtt_status, state.mqtt_status)
+        if not state.mqtt_last_status:
+            if not state.mqtt_status:
+                # Loading page, first connection attempt to device
+                send_mqtt_command(device["id"], CMD_REQUEST_STATUS, mqtt_status)
+            else:
+                mqtt_set_status(mqtt_status, state.mqtt_status)
 
 
         cols = st.beta_columns(6)
@@ -134,7 +138,7 @@ def display_device(state):
             if st.button("Refresh status"):
                 send_mqtt_command(device["id"], CMD_REQUEST_STATUS, mqtt_status)
 
-        st.header("Statistics")
+        st.header("Reported statistics")
         device_statistics = None
         date_filter = state.date_filter
 
@@ -178,13 +182,11 @@ def display_device(state):
         if not device_files:
             st.write("The selected device has no saved files yet")
         else:
+            if not state.mqtt_last_status:
+                st.write(":warning: **Downloads will fail since device is NOT connected**")
             for file_instance in device_files:
                 url = f"{device['file_server_address']}/{file_instance['video_name']}"
                 st.markdown(f"[{file_instance['video_name']}]({url})")
-                # Adding download attribute won't work anyway on chrome
-                # st.markdown(f"<a href=\"{url}\" download=\"{file_instance['video_name']}\""
-                #             f" target=\"_blank\">{file_instance['video_name']}</a>",
-                #             unsafe_allow_html=True)
 
 
 def mqtt_set_status(mqtt_status, text):
