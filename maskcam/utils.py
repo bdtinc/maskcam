@@ -1,12 +1,27 @@
 import socket
 from gi.repository import GLib
 
+_cached_values = {}
+
 
 def get_ip_address():
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.connect(("8.8.8.8", 80))
-        address = s.getsockname()[0]
-    return address
+    if "ip_address" not in _cached_values:
+        # This trick doesn't need internet connection
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("1.1.1.1", 80))
+            _cached_values["ip_address"] = f"{s.getsockname()[0]}"
+    return _cached_values["ip_address"]
+
+
+def get_streaming_address(host_address, rtsp_port, rtsp_path):
+    return f"rtsp://{host_address}:{rtsp_port}{rtsp_path}"
+
+
+def format_tdelta(time_delta):
+    # Format to show timedelta objects as string
+    if time_delta is None:
+        return "N/A"
+    return f"{time_delta}".split(".")[0]  # Remove nanoseconds
 
 
 def glib_cb_restart(t_restart):

@@ -22,8 +22,14 @@ from maskcam.common import (
     CMD_STREAMING_STOP,
     CMD_INFERENCE_RESTART,
     CMD_FILESERVER_RESTART,
+    CMD_STATUS_REQUEST,
 )
-from maskcam.utils import get_ip_address, load_udp_ports_filesaving
+from maskcam.utils import (
+    get_ip_address,
+    load_udp_ports_filesaving,
+    get_streaming_address,
+    format_tdelta,
+)
 from maskcam.mqtt_common import mqtt_connect_broker, mqtt_send_msg
 from maskcam.mqtt_common import (
     MQTT_BROKER_IP,
@@ -36,6 +42,7 @@ from maskcam.mqtt_common import (
     MQTT_TOPIC_FILES,
     MQTT_TOPIC_HELLO,
     MQTT_TOPIC_STATS,
+    MQTT_TOPIC_UPDATE,
     MQTT_TOPIC_COMMANDS,
 )
 from maskcam.maskcam_inference import main as inference_main
@@ -55,6 +62,13 @@ e_interrupt = threading.Event()
 q_commands = mp.Queue(maxsize=4)
 active_filesave_processes = []
 
+P_INFERENCE = "inference"
+P_STREAMING = "streaming"
+P_FILESERVER = "file-server"
+P_FILESAVE_PREFIX = "file-save-"
+
+processes_info = {}
+
 
 def sigint_handler(sig, frame):
     print("[red]Ctrl+C pressed. Interrupting all processes...[/red]")
@@ -72,12 +86,13 @@ def start_process(name, target_function, config, **kwargs):
             **kwargs,
         ),
     )
+    processes_info[name] = {"started": datetime.now(), "running": True}
     process.start()
     print(f"Process [yellow]{name}[/yellow] started with PID: {process.pid}")
     return process, e_interrupt_process
 
 
-def terminate_process(name, process, e_interrupt_process):
+def terminate_process(name, process, e_interrupt_process, delete_info=False):
     print(f"Sending interrupt to {name} process")
     e_interrupt_process.set()
     print(f"Waiting for process [yellow]{name}[/yellow] to terminate...")
@@ -88,6 +103,10 @@ def terminate_process(name, process, e_interrupt_process):
             warning=True,
         )
         process.terminate()
+    if delete_info:
+        del processes_info[name]  # Sequential processes, avoid filling memory
+    else:
+        processes_info[name].update({"ended": datetime.now(), "running": False})
     print(f"Process terminated: [yellow]{name}[/yellow]\n")
 
 
@@ -144,6 +163,40 @@ def mqtt_say_hello(mqtt_client):
         MQTT_TOPIC_HELLO,
         {"device_id": MQTT_DEVICE_NAME, "description": MQTT_DEVICE_DESCRIPTION},
         enqueue=False,  # Will be resent on_connect
+    )
+
+
+def mqtt_send_device_status(mqtt_client):
+    t_now = datetime.now()
+    if P_INFERENCE in processes_info and processes_info[P_INFERENCE]["running"]:
+        inference_runtime = t_now - processes_info[P_INFERENCE]["started"]
+    else:
+        inference_runtime = None
+    if P_FILESERVER in processes_info and processes_info[P_FILESERVER]["running"]:
+        fileserver_runtime = t_now - processes_info[P_FILESERVER]["started"]
+    else:
+        fileserver_runtime = None
+    if P_STREAMING in processes_info and processes_info[P_STREAMING]["running"]:
+        streaming_address = get_streaming_address(
+            get_ip_address(),
+            config["maskcam"]["streaming-port"],
+            config["maskcam"]["streaming-path"],
+        )
+    else:
+        streaming_address = "N/A"
+    total_fsave = len(active_filesave_processes)
+    keep_n = len([p for p in active_filesave_processes if p["flag_keep_file"]])
+    return mqtt_send_msg(
+        mqtt_client,
+        MQTT_TOPIC_UPDATE,
+        {
+            "device_id": MQTT_DEVICE_NAME,
+            "inference_runtime": format_tdelta(inference_runtime),
+            "fileserver_runtime": format_tdelta(fileserver_runtime),
+            "streaming_address": streaming_address,
+            "save_current_files": f"{keep_n}/{total_fsave}",
+        },
+        enqueue=False,  # Only latest status is interesting
     )
 
 
@@ -245,7 +298,7 @@ def handle_file_saving(
             f" [latest started at: {latest_start}]"
         )
         new_process_number = latest_number + 1
-        new_process_name = f"file-save-{new_process_number}"
+        new_process_name = f"{P_FILESAVE_PREFIX}{new_process_number}"
         new_filename = (
             f"{datetime.today().strftime('%Y%m%d_%H%M%S')}_{new_process_number}.mp4"
         )
@@ -278,6 +331,7 @@ def finish_filesave_process(active_process, hdd_dir, force_filesave, mqtt_client
         active_process["name"],
         active_process["process_handler"],
         active_process["e_interrupt"],
+        delete_info=True,
     )
     release_udp_port(active_process["udp_port"])
 
@@ -367,7 +421,7 @@ if __name__ == "__main__":
 
         if fileserver_enabled:
             process_fileserver, e_interrupt_fileserver = start_process(
-                "file-server", fileserver_main, config, directory=fileserver_hdd_dir
+                P_FILESERVER, fileserver_main, config, directory=fileserver_hdd_dir
             )
 
         # Inference process: If input is a file, also saves file
@@ -375,7 +429,7 @@ if __name__ == "__main__":
             None if is_live_input else f"output_{input_filename.split('/')[-1]}"
         )
         process_inference, e_interrupt_inference = start_process(
-            "inference",
+            P_INFERENCE,
             inference_main,
             config,
             input_filename=input_filename,
@@ -400,46 +454,57 @@ if __name__ == "__main__":
 
             if not q_commands.empty():
                 command = q_commands.get_nowait()
+                reply_updated_status = False
                 print(f"Processing command: [yellow]{command}[yellow]")
                 if command == CMD_STREAMING_START:
                     if process_streaming is None or not process_streaming.is_alive():
                         process_streaming, e_interrupt_streaming = start_process(
-                            "streaming", streaming_main, config
+                            P_STREAMING, streaming_main, config
                         )
+                    reply_updated_status = True
                 elif command == CMD_STREAMING_STOP:
                     if process_streaming is not None and process_streaming.is_alive():
                         terminate_process(
-                            "streaming", process_streaming, e_interrupt_streaming
+                            P_STREAMING, process_streaming, e_interrupt_streaming
                         )
+                    reply_updated_status = True
                 elif command == CMD_INFERENCE_RESTART:
                     if process_inference.is_alive():
                         terminate_process(
-                            "inference", process_inference, e_interrupt_inference
+                            P_INFERENCE, process_inference, e_interrupt_inference
                         )
                     process_inference, e_interrupt_inference = start_process(
-                        "inference",
+                        P_INFERENCE,
                         inference_main,
                         config,
                         input_filename=input_filename,
                         output_filename=output_filename,
                         stats_queue=stats_queue,
                     )
+                    reply_updated_status = True
                 elif command == CMD_FILESERVER_RESTART:
                     if process_fileserver is not None and process_fileserver.is_alive():
                         terminate_process(
-                            "file-server", process_fileserver, e_interrupt_fileserver
+                            P_FILESERVER, process_fileserver, e_interrupt_fileserver
                         )
                     process_fileserver, e_interrupt_fileserver = start_process(
-                        "file-server",
+                        P_FILESERVER,
                         fileserver_main,
                         config,
                         directory=fileserver_hdd_dir,
                     )
                     fileserver_enabled = True
+                    reply_updated_status = True
                 elif command == CMD_FILE_SAVE:
                     flag_keep_current_files()
+                    reply_updated_status = True
+                elif command == CMD_STATUS_REQUEST:
+                    reply_updated_status = True
                 else:
                     print("[red]Command not recognized[/red]", error=True)
+
+                if reply_updated_status:
+                    mqtt_send_device_status(mqtt_client)
             else:
                 e_interrupt.wait(timeout=0.1)
 
@@ -462,16 +527,16 @@ if __name__ == "__main__":
             console.print_exception()
     try:
         if process_inference is not None and process_inference.is_alive():
-            terminate_process("inference", process_inference, e_interrupt_inference)
+            terminate_process(P_INFERENCE, process_inference, e_interrupt_inference)
     except:
         console.print_exception()
     try:
         if process_fileserver is not None and process_fileserver.is_alive():
-            terminate_process("file-server", process_fileserver, e_interrupt_fileserver)
+            terminate_process(P_FILESERVER, process_fileserver, e_interrupt_fileserver)
     except:
         console.print_exception()
     try:
         if process_streaming is not None and process_streaming.is_alive():
-            terminate_process("streaming", process_streaming, e_interrupt_streaming)
+            terminate_process(P_STREAMING, process_streaming, e_interrupt_streaming)
     except:
         console.print_exception()

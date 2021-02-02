@@ -14,7 +14,7 @@ gi.require_version("GstRtspServer", "1.0")
 from gi.repository import GLib, Gst, GstRtspServer
 
 from .prints import print_streaming as print
-from .utils import get_ip_address, glib_cb_restart
+from .utils import get_ip_address, glib_cb_restart, get_streaming_address
 from .common import CODEC_MP4, CODEC_H264, CODEC_H265, CONFIG_FILE
 
 e_interrupt = None
@@ -31,8 +31,8 @@ def main(config, e_external_interrupt: mp.Event = None):
     udp_port = int(config["maskcam"]["udp-port-streaming"])
     codec = config["maskcam"]["codec"]
     # Streaming address: rtsp://<jetson-ip>:<rtsp-port>/<rtsp-address>
-    rtsp_streaming_port = int(config["maskcam"]["streaming-port"])
-    rtsp_streaming_address = "/maskcam"
+    rtsp_port = int(config["maskcam"]["streaming-port"])
+    rtsp_address = config["maskcam"]["streaming-path"]
     streaming_clock_rate = int(config["maskcam"]["streaming-clock-rate"])
 
     # udp_capabilities = f"application/x-rtp,media=video,encoding-name={codec},payload=96"
@@ -44,7 +44,7 @@ def main(config, e_external_interrupt: mp.Event = None):
 
     # Start streaming
     server = GstRtspServer.RTSPServer.new()
-    server.props.service = str(rtsp_streaming_port)
+    server.props.service = str(rtsp_port)
     server.attach(None)
 
     factory = GstRtspServer.RTSPMediaFactory.new()
@@ -54,11 +54,10 @@ def main(config, e_external_interrupt: mp.Event = None):
         f' encoding-name=(string){codec}, payload=96 " )'
     )
     factory.set_shared(True)
-    server.get_mount_points().add_factory(rtsp_streaming_address, factory)
+    server.get_mount_points().add_factory(rtsp_address, factory)
 
-    print(
-        f"\n\n[green bold]Streaming[/green bold] at rtsp://{get_ip_address()}:{rtsp_streaming_port}{rtsp_streaming_address}\n\n"
-    )
+    streaming_address = get_streaming_address(get_ip_address(), rtsp_port, rtsp_address)
+    print(f"\n\n[green bold]Streaming[/green bold] at {streaming_address}\n\n")
 
     # GLib loop required for RTSP server
     g_loop = GLib.MainLoop()

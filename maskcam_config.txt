@@ -17,6 +17,7 @@ udp-port-streaming=5400
 udp-ports-filesave=5401,5402
 
 streaming-port=8554
+streaming-path=/maskcam
 streaming-clock-rate=90000
 # Supported: MP4, H264, H265
 # Recommended H264 for stability on video save

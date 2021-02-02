@@ -8,6 +8,7 @@ from .prints import print_mqtt as print
 
 # MQTT topics
 MQTT_TOPIC_HELLO = "hello"
+MQTT_TOPIC_UPDATE = "device-status"
 MQTT_TOPIC_STATS = "receive-from-jetson"
 MQTT_TOPIC_ALERTS = "alerts"
 MQTT_TOPIC_FILES = "video-files"
