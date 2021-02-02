@@ -8,7 +8,8 @@ import threading
 import configparser
 import multiprocessing as mp
 
-# mp.set_start_method("spawn")  # noqa
+# Avoids random hangs in child processes (https://pythonspeed.com/articles/python-multiprocessing/)
+mp.set_start_method("spawn")  # noqa
 
 from rich.console import Console
 from datetime import datetime, timedelta
