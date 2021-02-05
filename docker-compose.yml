@@ -1,0 +1,14 @@
+version: '2'
+
+# this file only exists for local development
+# pushes to override the restart function
+
+services:
+  mc_maskcam:
+    restart: no
+    build: .
+    privileged: true
+    ports:
+      - "1883:1883"
+      - "8080:8080"
+      - "8554:8554"
