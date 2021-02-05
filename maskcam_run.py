@@ -400,6 +400,13 @@ if __name__ == "__main__":
         fileserver_ram_dir = config["maskcam"]["fileserver-ram-dir"]
         fileserver_hdd_dir = config["maskcam"]["fileserver-hdd-dir"]
 
+        # Inference restart timeout
+        tout_inference_restart = int(config["maskcam"]["timeout-inference-restart"])
+        if is_live_input and tout_inference_restart:
+            tout_inference_restart = timedelta(seconds=tout_inference_restart)
+        else:
+            tout_inference_restart = 0
+
         # Filesave processes: load available ports
         load_udp_ports_filesaving(config, udp_ports_pool)
 
@@ -509,8 +516,21 @@ if __name__ == "__main__":
             else:
                 e_interrupt.wait(timeout=0.1)
 
+            # Routine check: finish loop if the inference process is dead
             if not process_inference.is_alive():
                 e_interrupt.set()
+
+            # Routine check: restart inference at given interval (only live_input)
+            if tout_inference_restart:
+                inference_runtime = (
+                    datetime.now() - processes_info[P_INFERENCE]["started"]
+                )
+                if inference_runtime > tout_inference_restart:
+                    print(
+                        "[yellow]Restarting inference due to timeout-inference-restart"
+                        f"(inference runtime: {format_tdelta(inference_runtime)})[/yellow]"
+                    )
+                    new_command(CMD_INFERENCE_RESTART)
 
     except:
         console.print_exception()

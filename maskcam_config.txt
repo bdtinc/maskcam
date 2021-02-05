@@ -33,6 +33,10 @@ fileserver-ram-dir=/dev/shm
 # Use /tmp/* to clean saved videos on system reboot
 fileserver-hdd-dir=/tmp/saved_videos
 
+# Time (in seconds) to restart statistics (and the whole Deepstream inference process)
+# Set to 0 to disable / 24hs = 86400 seconds
+timeout-inference-restart=86400
+
 
 [property]
 interval=0
