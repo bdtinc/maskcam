@@ -526,10 +526,6 @@ def main(
     camera_framerate = config["maskcam"]["camera-framerate"]  # e.g: 10/1, 15/1
     camera_flip_method = int(config["maskcam"]["camera-flip-method"])
 
-    # Input camera configuration
-    # Use ./gst_capabilities.sh to get the list of available capabilities from /dev/video0
-    camera_capabilities = f"video/x-raw, framerate={camera_framerate}"
-
     # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
     output_width = 1024
     output_height = 576
@@ -558,6 +554,13 @@ def main(
                 "v4l2src", "v4l2-camera-source", "Camera input"
             )
             source.set_property("device", input_device)
+            nvvidconvsrc = make_elm_or_print_err(
+                "nvvideoconvert", "convertor_src2", "Convertor src 2"
+            )
+
+            # Input camera configuration
+            # Use ./gst_capabilities.sh to get the list of available capabilities from /dev/video0
+            camera_capabilities = f"video/x-raw, framerate={camera_framerate}"
         elif raspicam_input:
             input_device = input_filename[len(RASPICAM_PROTOCOL) :]
             source = make_elm_or_print_err(
@@ -565,9 +568,15 @@ def main(
             )
             source.set_property("sensor-id", int(input_device))
             source.set_property("bufapi-version", 1)
-            
+
             # Special camera_capabilities for raspicam
-            camera_capabilities = f"video/x-raw(memory:NVMM),width=1920,height=1080,framerate=10/1"
+            camera_capabilities = (
+                f"video/x-raw(memory:NVMM),framerate={camera_framerate}/1"
+            )
+            nvvidconvsrc = make_elm_or_print_err(
+                "nvvidconv", "convertor_flip", "Convertor flip"
+            )
+            nvvidconvsrc.set_property("flip-method", camera_flip_method)
 
         # Misterious converting sequence from deepstream_test_1_usb.py
         caps_camera = make_elm_or_print_err(
@@ -580,11 +589,6 @@ def main(
         vidconvsrc = make_elm_or_print_err(
             "videoconvert", "convertor_src1", "Convertor src 1"
         )
-        nvvidconvsrc = make_elm_or_print_err(
-            "nvvideoconvert", "convertor_src2", "Convertor src 2"
-        )
-        if camera_flip_method:
-            nvvidconvsrc.set_property("flip-method", camera_flip_method)
         caps_vidconvsrc = make_elm_or_print_err(
             "capsfilter", "nvmm_caps", "NVMM caps for input stream"
         )
