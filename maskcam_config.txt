@@ -16,6 +16,7 @@ udp-port-streaming=5400
 # 2 ports for overlapping file-save processes
 udp-ports-filesave=5401,5402
 
+streaming-start-default=0
 streaming-port=8554
 streaming-path=/maskcam
 streaming-clock-rate=90000
@@ -66,6 +67,10 @@ engine-create-func-name=NvDsInferYoloCudaEngineGet
 scaling-filter=1
 scaling-compute-hw=1
 #output-blob-names=2012
+
+# Async mode doesn't make sense with our custom python tracker
+classifier-async-mode=0
+
 
 [class-attrs-all]
 nms-iou-threshold=0.2

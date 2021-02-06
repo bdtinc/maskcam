@@ -280,9 +280,7 @@ def handle_file_saving(
     terminated_idxs = []
     for idx, active_process in enumerate(active_filesave_processes):
         if datetime.now() - active_process["started"] >= duration:
-            finish_filesave_process(
-                active_process, hdd_dir, force_save, mqtt_client=mqtt_client
-            )
+            finish_filesave_process(active_process, hdd_dir, force_save, mqtt_client=mqtt_client)
             terminated_idxs.append(idx)
         if latest_start is None or active_process["started"] > latest_start:
             latest_start = active_process["started"]
@@ -296,13 +294,11 @@ def handle_file_saving(
     if latest_start is None or (datetime.now() - latest_start >= period):
         print(
             "[green]Time to start a new video file [/green]"
-            f" [latest started at: {latest_start}]"
+            f" (latest started at: {format_tdelta(latest_start)})"
         )
         new_process_number = latest_number + 1
         new_process_name = f"{P_FILESAVE_PREFIX}{new_process_number}"
-        new_filename = (
-            f"{datetime.today().strftime('%Y%m%d_%H%M%S')}_{new_process_number}.mp4"
-        )
+        new_filename = f"{datetime.today().strftime('%Y%m%d_%H%M%S')}_{new_process_number}.mp4"
         new_filepath = f"{ram_dir}/{new_filename}"
         new_udp_port = allocate_free_udp_port()
         process_handler, e_interrupt_process = start_process(
@@ -390,10 +386,11 @@ if __name__ == "__main__":
         is_raspicamera = RASPICAM_PROTOCOL in input_filename
         is_live_input = is_usbcamera or is_raspicamera
 
+        # Streaming enabled by default?
+        streaming_autostart = int(config["maskcam"]["streaming-start-default"])
+
         # Fileserver: sequentially save videos (only for camera input)
-        fileserver_enabled = is_live_input and int(
-            config["maskcam"]["fileserver-enabled"]
-        )
+        fileserver_enabled = is_live_input and int(config["maskcam"]["fileserver-enabled"])
         fileserver_period = int(config["maskcam"]["fileserver-video-period"])
         fileserver_duration = int(config["maskcam"]["fileserver-video-duration"])
         fileserver_force_save = int(config["maskcam"]["fileserver-force-save"])
@@ -432,10 +429,12 @@ if __name__ == "__main__":
                 P_FILESERVER, fileserver_main, config, directory=fileserver_hdd_dir
             )
 
+        if streaming_autostart:
+            print("[yellow]Starting streaming (streaming-start-default is set)[/yellow]")
+            new_command(CMD_STREAMING_START)
+
         # Inference process: If input is a file, also saves file
-        output_filename = (
-            None if is_live_input else f"output_{input_filename.split('/')[-1]}"
-        )
+        output_filename = None if is_live_input else f"output_{input_filename.split('/')[-1]}"
         process_inference, e_interrupt_inference = start_process(
             P_INFERENCE,
             inference_main,
@@ -472,15 +471,11 @@ if __name__ == "__main__":
                     reply_updated_status = True
                 elif command == CMD_STREAMING_STOP:
                     if process_streaming is not None and process_streaming.is_alive():
-                        terminate_process(
-                            P_STREAMING, process_streaming, e_interrupt_streaming
-                        )
+                        terminate_process(P_STREAMING, process_streaming, e_interrupt_streaming)
                     reply_updated_status = True
                 elif command == CMD_INFERENCE_RESTART:
                     if process_inference.is_alive():
-                        terminate_process(
-                            P_INFERENCE, process_inference, e_interrupt_inference
-                        )
+                        terminate_process(P_INFERENCE, process_inference, e_interrupt_inference)
                     process_inference, e_interrupt_inference = start_process(
                         P_INFERENCE,
                         inference_main,
@@ -492,9 +487,7 @@ if __name__ == "__main__":
                     reply_updated_status = True
                 elif command == CMD_FILESERVER_RESTART:
                     if process_fileserver is not None and process_fileserver.is_alive():
-                        terminate_process(
-                            P_FILESERVER, process_fileserver, e_interrupt_fileserver
-                        )
+                        terminate_process(P_FILESERVER, process_fileserver, e_interrupt_fileserver)
                     process_fileserver, e_interrupt_fileserver = start_process(
                         P_FILESERVER,
                         fileserver_main,
@@ -522,9 +515,7 @@ if __name__ == "__main__":
 
             # Routine check: restart inference at given interval (only live_input)
             if tout_inference_restart:
-                inference_runtime = (
-                    datetime.now() - processes_info[P_INFERENCE]["started"]
-                )
+                inference_runtime = datetime.now() - processes_info[P_INFERENCE]["started"]
                 if inference_runtime > tout_inference_restart:
                     print(
                         "[yellow]Restarting inference due to timeout-inference-restart"
