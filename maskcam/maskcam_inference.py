@@ -94,8 +94,7 @@ class FaceMask:
             ),
         )
         mean_distance_normalized = (
-            np.mean(np.linalg.norm(detected_points - estimated_pose, axis=1))
-            / min_box_size
+            np.mean(np.linalg.norm(detected_points - estimated_pose, axis=1)) / min_box_size
         )
         return mean_distance_normalized
 
@@ -104,10 +103,7 @@ class FaceMask:
             return True
         box_width = box_points[1][0] - box_points[0][0]
         box_height = box_points[1][1] - box_points[0][1]
-        return (
-            min(box_width, box_height) >= self.min_face_size
-            and score >= self.th_detection
-        )
+        return min(box_width, box_height) >= self.min_face_size and score >= self.th_detection
 
     def add_detection(self, person_id, label, score):
         # This function is called from streaming thread
@@ -149,9 +145,7 @@ class FaceMask:
         with self.stats_lock:
             if filter_ids is not None:
                 filtered_people = {
-                    id: votes
-                    for id, votes in self.people_votes.items()
-                    if id in filter_ids
+                    id: votes for id, votes in self.people_votes.items() if id in filter_ids
                 }
             else:
                 filtered_people = self.people_votes
@@ -173,9 +167,7 @@ face_mask = FaceMask(0.1, 0.4, 0, disable_tracker=False)
 def cb_add_statistics(cb_args):
     stats_period, stats_queue = cb_args
 
-    people_total, people_classified, people_mask = face_mask.get_instant_statistics(
-        refresh=True
-    )
+    people_total, people_classified, people_mask = face_mask.get_instant_statistics(refresh=True)
     people_no_mask = people_classified - people_mask
 
     # stats_queue is an mp.Queue optionally provided externally (in main())
@@ -233,7 +225,7 @@ def draw_detection(display_meta, n_draw, box_points, detection_label, color):
     display_meta.num_labels = n_draw + 1
 
 
-def osd_sink_pad_buffer_probe(pad, info, u_data):
+def cb_buffer_probe(pad, info, u_data):
     global frame_number
     global start_time
     global total_frames  # Redundant w/ frame_number
@@ -309,6 +301,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
                 l_obj = l_obj.next
             except StopIteration:
                 break
+        # print(f"Dets: {len(detections)}")
 
         # Remove all object meta to avoid drawing. Do this outside while since we're modifying list
         for obj_meta in obj_meta_list:
@@ -323,9 +316,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
             # Track, count and draw tracked people
             tracked_people = face_mask.tracker.update(detections)
             # Filter out people with no live points (don't draw)
-            drawn_people = [
-                person for person in tracked_people if person.live_points.any()
-            ]
+            drawn_people = [person for person in tracked_people if person.live_points.any()]
 
             if face_mask.draw_tracked_people:
                 for n_person, person in enumerate(drawn_people):
@@ -347,9 +338,7 @@ def osd_sink_pad_buffer_probe(pad, info, u_data):
                         # Acquiring a display meta object. The memory ownership remains in
                         # the C code so downstream plugins can still access it. Otherwise
                         # the garbage collector will claim it when this probe function exits.
-                        display_meta = pyds.nvds_acquire_display_meta_from_pool(
-                            batch_meta
-                        )
+                        display_meta = pyds.nvds_acquire_display_meta_from_pool(batch_meta)
                         pyds.nvds_add_display_meta_to_frame(frame_meta, display_meta)
 
                     draw_detection(display_meta, n_draw, box_points, label, color)
@@ -412,9 +401,7 @@ def cb_newpad(decodebin, decoder_src_pad, data):
             # Get the source bin ghost pad
             bin_ghost_pad = source_bin.get_static_pad("src")
             if not bin_ghost_pad.set_target(decoder_src_pad):
-                print(
-                    "Failed to link decoder src pad to source bin ghost pad", error=True
-                )
+                print("Failed to link decoder src pad to source bin ghost pad", error=True)
         else:
             print("Decodebin did not pick nvidia decoder plugin", error=True)
 
@@ -521,18 +508,30 @@ def main(
 
     codec = config["maskcam"]["codec"]
     stats_period = int(config["maskcam"]["statistics-period"])
-    inference_interval = int(config["property"]["interval"])
-
-    camera_framerate = config["maskcam"]["camera-framerate"]  # e.g: 10/1, 15/1
-    camera_flip_method = int(config["maskcam"]["camera-flip-method"])
 
     # Original: 1920x1080, bdti_resized: 1024x576, yolo-input: 1024x608
     output_width = 1024
     output_height = 576
     output_bitrate = 6000000  # Nice for h264@1024x576: 4000000
 
+    # Two types of camera supported: USB or Raspi
+    usbcam_input = USBCAM_PROTOCOL in input_filename
+    raspicam_input = RASPICAM_PROTOCOL in input_filename
+    camera_input = usbcam_input or raspicam_input
+    if camera_input:
+        camera_framerate = int(config["maskcam"]["camera-framerate"])
+        camera_flip_method = int(config["maskcam"]["camera-flip-method"])
+
+    # Set nvinfer.interval (number of frames to skip inference and use tracker instead)
+    if camera_input and int(config["maskcam"]["inference-interval-auto"]):
+        max_fps = int(config["maskcam"]["inference-max-fps"])
+        inference_interval = camera_framerate // max_fps
+        print(f"Auto calculated frames to skip inference: {inference_interval}")
+    else:
+        inference_interval = int(config["property"]["interval"])
+        print(f"Configured frames to skip inference: {inference_interval}")
+
     # Standard GStreamer initialization
-    # GObject.threads_init()  # Doesn't seem necessary (see https://pygobject.readthedocs.io/en/latest/guide/threading.html)
     Gst.init(None)
 
     # Create gstreamer elements
@@ -543,16 +542,10 @@ def main(
     if not pipeline:
         print("Unable to create Pipeline", error=True)
 
-    # Two types of camera supported: USB or Raspi
-    usbcam_input = USBCAM_PROTOCOL in input_filename
-    raspicam_input = RASPICAM_PROTOCOL in input_filename
-    camera_input = usbcam_input or raspicam_input
     if camera_input:
         if usbcam_input:
             input_device = input_filename[len(USBCAM_PROTOCOL) :]
-            source = make_elm_or_print_err(
-                "v4l2src", "v4l2-camera-source", "Camera input"
-            )
+            source = make_elm_or_print_err("v4l2src", "v4l2-camera-source", "Camera input")
             source.set_property("device", input_device)
             nvvidconvsrc = make_elm_or_print_err(
                 "nvvideoconvert", "convertor_src2", "Convertor src 2"
@@ -560,7 +553,7 @@ def main(
 
             # Input camera configuration
             # Use ./gst_capabilities.sh to get the list of available capabilities from /dev/video0
-            camera_capabilities = f"video/x-raw, framerate={camera_framerate}"
+            camera_capabilities = f"video/x-raw, framerate={camera_framerate}/1"
         elif raspicam_input:
             input_device = input_filename[len(RASPICAM_PROTOCOL) :]
             source = make_elm_or_print_err(
@@ -570,31 +563,21 @@ def main(
             source.set_property("bufapi-version", 1)
 
             # Special camera_capabilities for raspicam
-            camera_capabilities = (
-                f"video/x-raw(memory:NVMM),framerate={camera_framerate}/1"
-            )
-            nvvidconvsrc = make_elm_or_print_err(
-                "nvvidconv", "convertor_flip", "Convertor flip"
-            )
+            camera_capabilities = f"video/x-raw(memory:NVMM),framerate={camera_framerate}/1"
+            nvvidconvsrc = make_elm_or_print_err("nvvidconv", "convertor_flip", "Convertor flip")
             nvvidconvsrc.set_property("flip-method", camera_flip_method)
 
         # Misterious converting sequence from deepstream_test_1_usb.py
-        caps_camera = make_elm_or_print_err(
-            "capsfilter", "camera_src_caps", "Camera caps filter"
-        )
+        caps_camera = make_elm_or_print_err("capsfilter", "camera_src_caps", "Camera caps filter")
         caps_camera.set_property(
             "caps",
             Gst.Caps.from_string(camera_capabilities),
         )
-        vidconvsrc = make_elm_or_print_err(
-            "videoconvert", "convertor_src1", "Convertor src 1"
-        )
+        vidconvsrc = make_elm_or_print_err("videoconvert", "convertor_src1", "Convertor src 1")
         caps_vidconvsrc = make_elm_or_print_err(
             "capsfilter", "nvmm_caps", "NVMM caps for input stream"
         )
-        caps_vidconvsrc.set_property(
-            "caps", Gst.Caps.from_string("video/x-raw(memory:NVMM)")
-        )
+        caps_vidconvsrc.set_property("caps", Gst.Caps.from_string("video/x-raw(memory:NVMM)"))
     else:
         source_bin = create_source_bin(0, input_filename)
 
@@ -602,9 +585,7 @@ def main(
     streammux = make_elm_or_print_err("nvstreammux", "Stream-muxer", "NvStreamMux")
     streammux.set_property("width", output_width)
     streammux.set_property("height", output_height)
-    streammux.set_property(
-        "enable-padding", True
-    )  # Keeps aspect ratio, but adds black margin
+    streammux.set_property("enable-padding", True)  # Keeps aspect ratio, but adds black margin
     streammux.set_property("batch-size", 1)
     streammux.set_property("batched-push-timeout", 4000000)
 
@@ -614,6 +595,7 @@ def main(
     # Inference element: object detection using TRT engine
     pgie = make_elm_or_print_err("nvinfer", "primary-inference", "pgie")
     pgie.set_property("config-file-path", CONFIG_FILE)
+    pgie.set_property("interval", inference_interval)
 
     # Use convertor to convert from NV12 to RGBA as required by nvosd
     convert_pre_osd = make_elm_or_print_err(
@@ -622,9 +604,7 @@ def main(
 
     # OSD: to draw on the RGBA buffer
     nvosd = make_elm_or_print_err("nvdsosd", "onscreendisplay", "OSD (nvosd)")
-    nvosd.set_property(
-        "process-mode", 2
-    )  # 0: CPU Mode, 1: GPU (only dGPU), 2: VIC (Jetson only)
+    nvosd.set_property("process-mode", 2)  # 0: CPU Mode, 1: GPU (only dGPU), 2: VIC (Jetson only)
     # nvosd.set_property("display-bbox", False)  # Bug: Removes all squares
     nvosd.set_property("display-clock", False)
     nvosd.set_property("display-text", True)  # Needed for any text
@@ -647,9 +627,7 @@ def main(
     if codec == CODEC_MP4:
         print("Creating MPEG-4 stream")
         encoder = make_elm_or_print_err("avenc_mpeg4", "encoder", "Encoder")
-        codeparser = make_elm_or_print_err(
-            "mpeg4videoparse", "mpeg4-parser", "Code Parser"
-        )
+        codeparser = make_elm_or_print_err("mpeg4videoparse", "mpeg4-parser", "Code Parser")
         rtppay = make_elm_or_print_err("rtpmp4vpay", "rtppay", "RTP MPEG-44 Payload")
     elif codec == CODEC_H264:
         print("Creating H264 stream")
@@ -669,15 +647,11 @@ def main(
     encoder.set_property("insert-sps-pps", 1)
     encoder.set_property("bitrate", output_bitrate)
 
-    splitter_file_udp = make_elm_or_print_err(
-        "tee", "tee_file_udp", "Splitter file/UDP"
-    )
+    splitter_file_udp = make_elm_or_print_err("tee", "tee_file_udp", "Splitter file/UDP")
 
     # UDP streaming
     queue_udp = make_elm_or_print_err("queue", "queue_udp", "UDP queue")
-    multiudpsink = make_elm_or_print_err(
-        "multiudpsink", "multi udpsink", "Multi UDP Sink"
-    )
+    multiudpsink = make_elm_or_print_err("multiudpsink", "multi udpsink", "Multi UDP Sink")
     # udpsink.set_property("host", "127.0.0.1")
     # udpsink.set_property("port", udp_port)
 
@@ -779,7 +753,7 @@ def main(
     if not osdsinkpad:
         print("Unable to get sink pad of nvosd", error=True)
 
-    osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, osd_sink_pad_buffer_probe, 0)
+    osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, cb_buffer_probe, 0)
 
     # GLib loop required for RTSP server
     g_loop = GLib.MainLoop()
@@ -849,26 +823,19 @@ def main(
         # Profiling display
         if start_time is not None and end_time is not None:
             total_time = end_time - start_time
-            total_frames = (
-                total_frames - 1
-            )  # Remove first frame as its inference is not counted
+            total_frames = total_frames - 1  # Remove first frame as its inference is not counted
             inference_frames = total_frames // (inference_interval + 1)
             print()
             print(f"[bold yellow] ---- Profiling ---- [/bold yellow]")
-            print(
-                f"Inference frames: {inference_frames} | Processed frames: {total_frames}"
-            )
-            print(
-                f"Time from time_start_playing: {end_time - time_start_playing:.2f} seconds"
-            )
+            print(f"Inference frames: {inference_frames} | Processed frames: {total_frames}")
+            print(f"Time from time_start_playing: {end_time - time_start_playing:.2f} seconds")
             print(f"Total time skipping first inference: {total_time:.2f} seconds")
             print(f"Avg. time/frame: {total_time/total_frames:.4f} secs")
-            print(
-                f"[bold yellow]FPS: {total_frames/total_time:.1f} frames/second[/bold yellow]\n"
-            )
+            print(f"[bold yellow]FPS: {total_frames/total_time:.1f} frames/second[/bold yellow]\n")
             if inference_interval != 0:
                 print(
-                    f"[red]NOTE:[/red] skipping inference every interval={inference_interval} frames"
+                    "[red]NOTE: FPS calculated skipping inference every"
+                    f" interval={inference_interval} frames[/red]"
                 )
         if output_filename is not None:
             print(f"Output file saved: [green bold]{output_filename}[/green bold]")

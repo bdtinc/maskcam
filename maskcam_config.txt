@@ -2,8 +2,16 @@
 default-input=v4l2:///dev/video0
 
 # Run utils/gst_capabilities.sh and find some combination with framerate <= 14 fps
-camera-framerate=10/1
 camera-flip-method=0
+camera-framerate=30
+
+# Auto-calculate nvinfer's `interval` based on `camera-framerate` and `inference-max-fps`
+# to avoid delaying the pipeline. This will override the fixed `interval` parameter below
+# E.g: if framerate=30 and max-fps=14,
+#      -> will set interval=2 so that inference runs only 1/3 of incoming frames
+inference-interval-auto=1
+# Only needed if inference-interval-auto. Adjust value (14fps is for Jetson Nano 4GB)
+inference-max-fps=14
 
 # Statistics and alerts
 alert-min-visible-people=1
