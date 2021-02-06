@@ -1,0 +1,7 @@
+# dev deps
+pip-tools
+black
+flake8
+jupyter
+ipython
+ipdb

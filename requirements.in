@@ -1,24 +1,13 @@
-# dev deps
-pip-tools
-black
-flake8
-jupyter
-ipython
-ipdb
-
 # General deps
-Cython
-numpy
-scipy
-PyYAML
+Cython==0.29.21
+numpy==1.18.0
+scipy==1.1.0
+PyYAML==3.12
 
 # MQTT
-paho-mqtt
-
-# Pytorch
-# torch
-# torchvision
+paho-mqtt==1.5.1
 
 # Tracker & video pipeline. Exclude it on Jetson (see README)
-norfair
-filterpy
+norfair==0.1.8
+filterpy==1.4.5
+rich==7.1.0
