@@ -1,0 +1,11 @@
+Metadata-Version: 1.1
+Name: opencv-python
+Version: 3.2.0
+Summary: stub file to make pip aware of apt installed opencv
+Home-page: UNKNOWN
+Author: UNKNOWN
+Author-email: UNKNOWN
+License: UNKNOWN
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3

@@ -1,7 +1,8 @@
+-c constraints.docker
 # General deps
-Cython==0.29.21
-numpy==1.18.0
-scipy==1.1.0
+Cython
+numpy
+scipy
 PyYAML==3.12
 
 # MQTT
