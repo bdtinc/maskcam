@@ -55,23 +55,21 @@ RUN \
      /usr/local/cuda-10.2/doc 
 
 RUN apt-get install -y deepstream-5.0 && \
-  rm -rf /opt/nvidia/deepstream/deepstream-5.0/samples && ldconfig
-
-# removing for troubleshooting
-#     /usr/lib/aarch64-linux-gnu/libcudnn_static_v8.a \
-#     /usr/lib/aarch64-linux-gnu/libcudnn_cnn_infer_static_v8.a \
-#     /usr/lib/aarch64-linux-gnu/libnvinfer_static.a \
-#     /usr/lib/aarch64-linux-gnu/libcudnn_adv_infer_static_v8.a \
-#     /usr/lib/aarch64-linux-gnu/libcublas_static.a \
-#     /usr/lib/aarch64-linux-gnu/libcudnn_adv_train_static_v8.a \
-#     /usr/lib/aarch64-linux-gnu/libcudnn_ops_infer_static_v8.a \
-#     /usr/lib/aarch64-linux-gnu/libcublasLt_static.a \
-#     /usr/lib/aarch64-linux-gnu/libcudnn_cnn_train_static_v8.a \
-#     /usr/lib/aarch64-linux-gnu/libcudnn_ops_train_static_v8.a \
-#     /usr/lib/aarch64-linux-gnu/libmyelin_compiler_static.a \
-#     /usr/lib/aarch64-linux-gnu/libmyelin_executor_static.a \
-#     /usr/lib/aarch64-linux-gnu/libnvinfer_plugin_static.a && \
-#     ldconfig
+  rm -rf /opt/nvidia/deepstream/deepstream-5.0/samples \
+     /usr/lib/aarch64-linux-gnu/libcudnn_static_v8.a \
+     /usr/lib/aarch64-linux-gnu/libcudnn_cnn_infer_static_v8.a \
+     /usr/lib/aarch64-linux-gnu/libnvinfer_static.a \
+     /usr/lib/aarch64-linux-gnu/libcudnn_adv_infer_static_v8.a \
+     /usr/lib/aarch64-linux-gnu/libcublas_static.a \
+     /usr/lib/aarch64-linux-gnu/libcudnn_adv_train_static_v8.a \
+     /usr/lib/aarch64-linux-gnu/libcudnn_ops_infer_static_v8.a \
+     /usr/lib/aarch64-linux-gnu/libcublasLt_static.a \
+     /usr/lib/aarch64-linux-gnu/libcudnn_cnn_train_static_v8.a \
+     /usr/lib/aarch64-linux-gnu/libcudnn_ops_train_static_v8.a \
+     /usr/lib/aarch64-linux-gnu/libmyelin_compiler_static.a \
+     /usr/lib/aarch64-linux-gnu/libmyelin_executor_static.a \
+     /usr/lib/aarch64-linux-gnu/libnvinfer_plugin_static.a && \
+     ldconfig
 
 
 # install maskcam
@@ -91,7 +89,7 @@ WORKDIR /opt/maskcam_1.0
 
 COPY . /opt/maskcam_1.0/
 
-COPY temp-dev/opencv_python-3.2.0.egg-info /usr/lib/python3/dist-packages/opencv_python-3.2.0.egg-info
+COPY docker/opencv_python-3.2.0.egg-info /usr/lib/python3/dist-packages/opencv_python-3.2.0.egg-info
 
 RUN pip3 install --upgrade pip && \
     pip3 install -r requirements.docker

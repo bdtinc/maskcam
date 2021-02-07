@@ -4,6 +4,7 @@ Cython
 numpy
 scipy
 PyYAML==3.12
+ipdb
 
 # MQTT
 paho-mqtt==1.5.1
