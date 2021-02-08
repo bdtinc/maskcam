@@ -43,17 +43,19 @@ FRAMES_LOG_INTERVAL = 50
 frame_number = 0
 start_time = None
 end_time = None
-total_frames = 0
 console = Console()
 e_interrupt = None
 
 
-class FaceMask:
-    def __init__(self, th_detection, th_vote, min_face_size, disable_tracker=False):
+class FaceMaskProcessor:
+    def __init__(
+        self, th_detection=0, th_vote=0, min_face_size=0, tracker_period=1, disable_tracker=False
+    ):
         self.people_votes = {}
         self.current_people = set()
         self.th_detection = th_detection
         self.th_vote = th_vote
+        self.tracker_period = tracker_period
         self.min_face_size = min_face_size
         self.disable_detection_validation = False
         self.min_votes = 5
@@ -74,8 +76,8 @@ class FaceMask:
                 detection_threshold=self.th_detection,
                 distance_threshold=1,
                 point_transience=8,
-                hit_inertia_min=25,
-                hit_inertia_max=60,
+                hit_inertia_min=15,
+                hit_inertia_max=45,
             )
 
     def keypoints_distance(self, detected_pose, tracked_pose):
@@ -161,13 +163,12 @@ class FaceMask:
         return total_people, total_classified, total_mask
 
 
-face_mask = FaceMask(0.1, 0.4, 0, disable_tracker=False)
-
-
 def cb_add_statistics(cb_args):
-    stats_period, stats_queue = cb_args
+    stats_period, stats_queue, face_processor = cb_args
 
-    people_total, people_classified, people_mask = face_mask.get_instant_statistics(refresh=True)
+    people_total, people_classified, people_mask = face_processor.get_instant_statistics(
+        refresh=True
+    )
     people_no_mask = people_classified - people_mask
 
     # stats_queue is an mp.Queue optionally provided externally (in main())
@@ -228,16 +229,8 @@ def draw_detection(display_meta, n_draw, box_points, detection_label, color):
 def cb_buffer_probe(pad, info, u_data):
     global frame_number
     global start_time
-    global total_frames  # Redundant w/ frame_number
-    # print(".", end="", flush=True)
-    # Intiallizing object counter with 0.
-    obj_counter = {
-        PGIE_CLASS_ID_MASK: 0,
-        PGIE_CLASS_ID_NO_MASK: 0,
-        PGIE_CLASS_ID_NOT_VISIBLE: 0,
-        PGIE_CLASS_ID_MISPLACED: 0,
-    }
 
+    face_processor = u_data
     gst_buffer = info.get_buffer()
     if not gst_buffer:
         print("Unable to get GstBuffer", error=True)
@@ -247,12 +240,9 @@ def cb_buffer_probe(pad, info, u_data):
     # Note that pyds.gst_buffer_get_nvds_batch_meta() expects the
     # C address of gst_buffer as input, which is obtained with hash(gst_buffer)
     batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
-    if not total_frames % FRAMES_LOG_INTERVAL:
-        print(f"Processed {total_frames} frames...")
 
     l_frame = batch_meta.frame_meta_list
     while l_frame is not None:
-        total_frames += 1
         try:
             # Note that l_frame.data needs a cast to pyds.NvDsFrameMeta
             # The casting is done by pyds.glist_get_nvds_frame_meta()
@@ -277,7 +267,6 @@ def cb_buffer_probe(pad, info, u_data):
             except StopIteration:
                 break
             obj_meta_list.append(obj_meta)
-            obj_counter[obj_meta.class_id] += 1
             obj_meta.rect_params.border_color.set(0.0, 0.0, 1.0, 0.0)
             box = obj_meta.rect_params
             # print(f"{obj_meta.obj_label} | {obj_meta.confidence}")
@@ -288,7 +277,7 @@ def cb_buffer_probe(pad, info, u_data):
             )
             box_p = obj_meta.confidence
             box_label = obj_meta.obj_label
-            if face_mask.validate_detection(box_points, box_p, box_label):
+            if face_processor.validate_detection(box_points, box_p, box_label):
                 det_data = {"label": box_label, "p": box_p}
                 detections.append(
                     Detection(
@@ -301,7 +290,6 @@ def cb_buffer_probe(pad, info, u_data):
                 l_obj = l_obj.next
             except StopIteration:
                 break
-        # print(f"Dets: {len(detections)}")
 
         # Remove all object meta to avoid drawing. Do this outside while since we're modifying list
         for obj_meta in obj_meta_list:
@@ -312,24 +300,26 @@ def cb_buffer_probe(pad, info, u_data):
         # Each meta object carries max 16 rects/labels/etc.
         max_drawings_per_meta = 16  # This is hardcoded, not documented
 
-        if face_mask.tracker is not None:
+        if face_processor.tracker is not None:
             # Track, count and draw tracked people
-            tracked_people = face_mask.tracker.update(detections)
+            tracked_people = face_processor.tracker.update(
+                detections, period=face_processor.tracker_period
+            )
             # Filter out people with no live points (don't draw)
             drawn_people = [person for person in tracked_people if person.live_points.any()]
 
-            if face_mask.draw_tracked_people:
+            if face_processor.draw_tracked_people:
                 for n_person, person in enumerate(drawn_people):
                     points = person.estimate
                     box_points = points.clip(0).astype(int)
 
                     # Update mask votes
-                    face_mask.add_detection(
+                    face_processor.add_detection(
                         person.id,
                         person.last_detection.data["label"],
                         person.last_detection.data["p"],
                     )
-                    label, color = face_mask.get_person_label(person.id)
+                    label, color = face_processor.get_person_label(person.id)
 
                     # Index of this person's drawing in the current meta
                     n_draw = n_person % max_drawings_per_meta
@@ -344,17 +334,17 @@ def cb_buffer_probe(pad, info, u_data):
                     draw_detection(display_meta, n_draw, box_points, label, color)
 
         # Raw detections
-        if face_mask.draw_raw_detections:
+        if face_processor.draw_raw_detections:
             for n_detection, detection in enumerate(detections):
                 points = detection.points
                 box_points = points.clip(0).astype(int)
                 label = detection.data["label"]
                 if label == "mask":
-                    color = face_mask.color_mask
+                    color = face_processor.color_mask
                 elif label == "no_mask" or label == "misplaced":
-                    color = face_mask.color_no_mask
+                    color = face_processor.color_no_mask
                 else:
-                    color = face_mask.color_unknown
+                    color = face_processor.color_unknown
                 label = f"{label} | {detection.data['p']:.2f}"
                 n_draw = n_detection % max_drawings_per_meta
 
@@ -370,6 +360,8 @@ def cb_buffer_probe(pad, info, u_data):
             # print(pyds.get_string(py_nvosd_text_params.display_text))
             # print(".", end="", flush=True)
         # print("")
+        if not frame_number % FRAMES_LOG_INTERVAL:
+            print(f"Processed {frame_number} frames...")
 
         try:
             l_frame = l_frame.next
@@ -497,7 +489,6 @@ def main(
     stats_queue: mp.Queue = None,
 ):
     global frame_number
-    global total_frames
     global start_time
     global end_time
     global e_interrupt
@@ -525,11 +516,25 @@ def main(
     # Set nvinfer.interval (number of frames to skip inference and use tracker instead)
     if camera_input and int(config["maskcam"]["inference-interval-auto"]):
         max_fps = int(config["maskcam"]["inference-max-fps"])
-        inference_interval = camera_framerate // max_fps
-        print(f"Auto calculated frames to skip inference: {inference_interval}")
+        skip_inference = camera_framerate // max_fps
+        print(f"Auto calculated frames to skip inference: {skip_inference}")
     else:
-        inference_interval = int(config["property"]["interval"])
-        print(f"Configured frames to skip inference: {inference_interval}")
+        skip_inference = int(config["property"]["interval"])
+        print(f"Configured frames to skip inference: {skip_inference}")
+
+    # FaceMask initialization
+    face_tracker_period = skip_inference + 1  # tracker_period=skipped + inference frame(1)
+    face_detection_threshold = float(config["face-processor"]["detection-threshold"])
+    face_voting_threshold = float(config["face-processor"]["voting-threshold"])
+    face_min_face_size = int(config["face-processor"]["min-face-size"])
+    face_disable_tracker = int(config["face-processor"]["disable-tracker"])
+    face_processor = FaceMaskProcessor(
+        th_detection=face_detection_threshold,
+        th_vote=face_voting_threshold,
+        min_face_size=face_min_face_size,
+        tracker_period=face_tracker_period,
+        disable_tracker=face_disable_tracker,
+    )
 
     # Standard GStreamer initialization
     Gst.init(None)
@@ -595,7 +600,7 @@ def main(
     # Inference element: object detection using TRT engine
     pgie = make_elm_or_print_err("nvinfer", "primary-inference", "pgie")
     pgie.set_property("config-file-path", CONFIG_FILE)
-    pgie.set_property("interval", inference_interval)
+    pgie.set_property("interval", skip_inference)
 
     # Use convertor to convert from NV12 to RGBA as required by nvosd
     convert_pre_osd = make_elm_or_print_err(
@@ -753,7 +758,7 @@ def main(
     if not osdsinkpad:
         print("Unable to get sink pad of nvosd", error=True)
 
-    osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, cb_buffer_probe, 0)
+    osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, cb_buffer_probe, face_processor)
 
     # GLib loop required for RTSP server
     g_loop = GLib.MainLoop()
@@ -823,8 +828,8 @@ def main(
         # Profiling display
         if start_time is not None and end_time is not None:
             total_time = end_time - start_time
-            total_frames = total_frames - 1  # Remove first frame as its inference is not counted
-            inference_frames = total_frames // (inference_interval + 1)
+            total_frames = frame_number
+            inference_frames = total_frames // (skip_inference + 1)
             print()
             print(f"[bold yellow] ---- Profiling ---- [/bold yellow]")
             print(f"Inference frames: {inference_frames} | Processed frames: {total_frames}")
@@ -832,10 +837,10 @@ def main(
             print(f"Total time skipping first inference: {total_time:.2f} seconds")
             print(f"Avg. time/frame: {total_time/total_frames:.4f} secs")
             print(f"[bold yellow]FPS: {total_frames/total_time:.1f} frames/second[/bold yellow]\n")
-            if inference_interval != 0:
+            if skip_inference != 0:
                 print(
                     "[red]NOTE: FPS calculated skipping inference every"
-                    f" interval={inference_interval} frames[/red]"
+                    f" interval={skip_inference} frames[/red]"
                 )
         if output_filename is not None:
             print(f"Output file saved: [green bold]{output_filename}[/green bold]")

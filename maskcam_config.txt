@@ -24,7 +24,7 @@ udp-port-streaming=5400
 # 2 ports for overlapping file-save processes
 udp-ports-filesave=5401,5402
 
-streaming-start-default=0
+streaming-start-default=1
 streaming-port=8554
 streaming-path=/maskcam
 streaming-clock-rate=90000
@@ -46,6 +46,11 @@ fileserver-hdd-dir=/tmp/saved_videos
 # Set to 0 to disable / 24hs = 86400 seconds
 timeout-inference-restart=86400
 
+[face-processor]
+detection-threshold=0.1
+voting-threshold=0.4
+min-face-size=8
+disable-tracker=0
 
 [property]
 interval=0
