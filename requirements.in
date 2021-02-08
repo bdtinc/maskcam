@@ -3,6 +3,7 @@ Cython==0.29.21
 numpy==1.18.0
 scipy==1.1.0
 PyYAML==3.12
+ipdb
 
 # MQTT
 paho-mqtt==1.5.1

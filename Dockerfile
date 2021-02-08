@@ -45,7 +45,6 @@ RUN apt-get install -y \
     gstreamer1.0-libav \
     libgstrtspserver-1.0-0 \
     libjansson4=2.11-1 \
-    xorg \
     cuda-toolkit-10-2 && \
     ldconfig
     
@@ -89,6 +88,7 @@ WORKDIR /opt/maskcam_1.0
 
 COPY . /opt/maskcam_1.0/
 
+#tell pip we have opencv for python installed by apt
 COPY docker/opencv_python-3.2.0.egg-info /usr/lib/python3/dist-packages/opencv_python-3.2.0.egg-info
 
 RUN pip3 install --upgrade pip && \
