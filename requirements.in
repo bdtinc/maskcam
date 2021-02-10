@@ -1,14 +1,14 @@
 # General deps
-Cython==0.29.21
-numpy==1.18.0
-scipy==1.1.0
-PyYAML==3.12
+numpy
+scipy
+PyYAML
 ipdb
 
 # MQTT
-paho-mqtt==1.5.1
+paho-mqtt
 
-# Tracker & video pipeline. Exclude it on Jetson (see README)
-norfair==0.1.8
-filterpy==1.4.5
-rich==7.1.0
+# Tracker
+norfair
+
+# Colored prints and traceback
+rich

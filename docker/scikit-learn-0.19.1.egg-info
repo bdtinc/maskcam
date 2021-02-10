@@ -1,0 +1,11 @@
+Metadata-Version: 1.1
+Name: scikit-learn
+Version: 0.19.1
+Summary: stub file to make pip aware of apt installed package
+Home-page: UNKNOWN
+Author: UNKNOWN
+Author-email: UNKNOWN
+License: UNKNOWN
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
