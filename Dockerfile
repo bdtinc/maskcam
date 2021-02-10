@@ -117,7 +117,7 @@ ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1
 RUN pip3 install --upgrade pip && pip3 install -r requirements.in -c docker/constraints.docker
 
 #get model
-RUN wget -P /opt/maskcam_1.0 https://maskcam.s3.us-east-2.amazonaws.com/facemask_y4tiny_1024_608_fp16.trt
+RUN wget -P /opt/maskcam_1.0/yolo https://maskcam.s3.us-east-2.amazonaws.com/facemask_y4tiny_1024_608_fp16.trt
 
 # TODO: develop multiple conditional entrypoints instead of this default.
 CMD ["bash"]
