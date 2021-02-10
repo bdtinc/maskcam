@@ -1,4 +1,4 @@
-FROM balenalib/jetson-nano-ubuntu:bionic
+FROM balenalib/jetson-nano-ubuntu:20210201
 
 # installs maskcam on a BalenaOS container
 
@@ -114,10 +114,12 @@ RUN cd /opt/maskcam_1.0/deepstream_plugin_yolov4 && make
 ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1
 
 # Install maskcam requirements
-RUN pip3 install --upgrade pip
-RUN pip3 install -r requirements.in -c constraints.docker
+RUN pip3 install --upgrade pip && pip3 install -r requirements.in -c docker/constraints.docker
 
-# CMD ["sleep", "infinity"]
+#get model
+RUN wget -P /opt/maskcam_1.0 https://maskcam.s3.us-east-2.amazonaws.com/facemask_y4tiny_1024_608_fp16.trt
 
-# Required for CSI camera (e.g: RaspiCam)
-CMD ["nvargus-daemon"]
+# TODO: develop multiple conditional entrypoints instead of this default.
+CMD ["bash"]
+
+#TODO: figure out how/where to add nvargus-daemon
