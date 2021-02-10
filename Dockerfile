@@ -71,8 +71,8 @@ RUN apt-get install -y deepstream-5.0 && \
      ldconfig
 
 
-# install maskcam
 
+# Install system-level python3 packages
 RUN apt-get update && apt-get install -y \
   gir1.2-gst-rtsp-server-1.0 \
   python3-pip \
@@ -84,17 +84,11 @@ RUN apt-get update && apt-get install -y \
   python-gi-dev \
   unzip && ldconfig
 
-WORKDIR /opt/maskcam_1.0
+# Tell pip we have some packages installed system-level, so that it resolves dependencies
+COPY docker/opencv_python-3.2.0.egg-info /usr/lib/python3/dist-packages/
+COPY docker/scikit-learn-0.19.1.egg-info /usr/lib/python3/dist-packages/
 
-COPY . /opt/maskcam_1.0/
-
-#tell pip we have opencv for python installed by apt
-COPY docker/opencv_python-3.2.0.egg-info /usr/lib/python3/dist-packages/opencv_python-3.2.0.egg-info
-
-RUN pip3 install --upgrade pip && \
-    pip3 install -r requirements.docker
-#    pip3 install -r --no-deps requirements.nodep
-
+# Install gst-python (python bindings for GStreamer)
 RUN \
    export GST_CFLAGS="-pthread -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include" && \
    export GST_LIBS="-lgstreamer-1.0 -lgobject-2.0 -lglib-2.0" && \
@@ -104,14 +98,26 @@ RUN \
    ./configure PYTHON=python3 && \
    make && make install
 
+# Insatll pyds (python bindings for DeepStream)
 RUN cd /opt/nvidia/deepstream/deepstream-5.0/lib && python3 setup.py install
 
-ENV CUDA_VER=10.2
 
+# Copy maskcam code
+COPY . /opt/maskcam_1.0/
+WORKDIR /opt/maskcam_1.0
+
+# Compile YOLOv4 plugin for DeepStream
+ENV CUDA_VER=10.2
 RUN cd /opt/maskcam_1.0/deepstream_plugin_yolov4 && make
 
-# comment this out for using usb webcam only
-# And...this doesn't work. Will need to make a wrapper.
-# RUN nvargus-daemon &
-  
-CMD [ "sleep", "infinity" ]
+# Preload library to avoids Gst errors "cannot allocate memory in static TLS block"
+ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1
+
+# Install maskcam requirements
+RUN pip3 install --upgrade pip
+RUN pip3 install -r requirements.in -c constraints.docker
+
+# CMD ["sleep", "infinity"]
+
+# Required for CSI camera (e.g: RaspiCam)
+CMD ["nvargus-daemon"]
