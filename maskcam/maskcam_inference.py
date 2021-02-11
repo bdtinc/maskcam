@@ -788,7 +788,7 @@ def main(
 
         # Timer to add statistics to queue
         if stats_queue is not None:
-            cb_args = stats_period, stats_queue
+            cb_args = stats_period, stats_queue, face_processor
             GLib.timeout_add_seconds(stats_period, cb_add_statistics, cb_args)
 
         # Periodic gloop interrupt (see utils.glib_cb_restart)
