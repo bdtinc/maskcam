@@ -1,9 +1,42 @@
+[face-processor]
+# Detections with score below this threshold will be discarded
+detection-threshold=0.1
+# Only vote mask/no_mask when detection score is above this
+voting-threshold=0.4
+# Smaller detections (in pixels) will be discarded
+min-face-size=8
+
+# Disable tracker to draw raw detections and set thresholds above
+disable-tracker=0
+
 [maskcam]
+# Alert conditions
+# Minimum people to even calculate no-mask-fraction
+alert-min-visible-people=1
+# More than this fraction of people without mask will raise an alarm
+alert-no-mask-fraction=0.25
+# More than this people detected will raise alarm despite no-mask-fraction
+alert-max-total-people=10
+
+# Time to send statistics in seconds. Set smaller than fileserver-video-period
+statistics-period=15
+
+# Time (in seconds) to restart statistics (and the whole Deepstream inference process)
+# Set to 0 to disable / 24hs = 86400 seconds
+timeout-inference-restart=86400
+
+# Other valid inputs:
+#  - CSI cameras like RaspiCam:
+#    -> argus://0
+#  - Any file:
+#    -> file:///absolute/path/to/file.mp4
 default-input=v4l2:///dev/video0
 
 # Run utils/gst_capabilities.sh and find some combination with framerate <= 14 fps
-camera-flip-method=0
 camera-framerate=30
+
+# Only used for argus:// inputs
+camera-flip-method=0
 
 # Auto-calculate nvinfer's `interval` based on `camera-framerate` and `inference-max-fps`
 # to avoid delaying the pipeline. This will override the fixed `interval` parameter below
@@ -12,13 +45,6 @@ camera-framerate=30
 inference-interval-auto=1
 # Only needed if inference-interval-auto. Adjust value (14fps is for Jetson Nano 4GB)
 inference-max-fps=14
-
-# Statistics and alerts
-alert-min-visible-people=1
-alert-max-total-people=10
-alert-no-mask-fraction=0.25
-# This must be smaller than fileserver-video-period so that alerts save the right video
-statistics-period=15
 
 udp-port-streaming=5400
 # 2 ports for overlapping file-save processes
@@ -41,16 +67,6 @@ fileserver-force-save=0
 fileserver-ram-dir=/dev/shm
 # Use /tmp/* to clean saved videos on system reboot
 fileserver-hdd-dir=/tmp/saved_videos
-
-# Time (in seconds) to restart statistics (and the whole Deepstream inference process)
-# Set to 0 to disable / 24hs = 86400 seconds
-timeout-inference-restart=86400
-
-[face-processor]
-detection-threshold=0.1
-voting-threshold=0.4
-min-face-size=8
-disable-tracker=0
 
 [property]
 interval=0
