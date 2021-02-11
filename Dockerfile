@@ -1,6 +1,5 @@
+# Installs maskcam on a BalenaOS container (devkit or Photon)
 FROM balenalib/jetson-nano-ubuntu:20210201
-
-# installs maskcam on a BalenaOS container
 
 # Don't prompt with any configuration questions
 ENV DEBIAN_FRONTEND noninteractive
@@ -33,8 +32,7 @@ RUN apt-get update && apt-get install -y wget tar python3 libegl1 && \
     echo "/usr/lib/aarch64-linux-gnu/tegra" > /etc/ld.so.conf.d/nvidia-tegra.conf && \
     echo "/usr/lib/aarch64-linux-gnu/tegra-egl" > /etc/ld.so.conf.d/nvidia-tegra-egl.conf && ldconfig
 
-# install deepstream
-
+# Install GStreamer and remove unnecessary files
 RUN apt-get install -y \
     libssl1.0.0 \
     libgstreamer1.0-0 \
@@ -47,12 +45,12 @@ RUN apt-get install -y \
     libjansson4=2.11-1 \
     cuda-toolkit-10-2 && \
     ldconfig
-    
 RUN \
   rm -rf /usr/src/nvidia/graphics_demos \
      /usr/local/cuda-10.2/samples \
      /usr/local/cuda-10.2/doc 
 
+# Install DeepStream
 RUN apt-get install -y deepstream-5.0 && \
   rm -rf /opt/nvidia/deepstream/deepstream-5.0/samples \
      /usr/lib/aarch64-linux-gnu/libcudnn_static_v8.a \
@@ -70,8 +68,6 @@ RUN apt-get install -y deepstream-5.0 && \
      /usr/lib/aarch64-linux-gnu/libnvinfer_plugin_static.a && \
      ldconfig
 
-
-
 # Install system-level python3 packages
 RUN apt-get update && apt-get install -y \
   gir1.2-gst-rtsp-server-1.0 \
@@ -84,7 +80,7 @@ RUN apt-get update && apt-get install -y \
   python-gi-dev \
   unzip && ldconfig
 
-# Tell pip we have some packages installed system-level, so that it resolves dependencies
+# These system-level packages don't provide egg-info files, add them manually so that pip knows
 COPY docker/opencv_python-3.2.0.egg-info /usr/lib/python3/dist-packages/
 COPY docker/scikit-learn-0.19.1.egg-info /usr/lib/python3/dist-packages/
 
@@ -98,28 +94,42 @@ RUN \
    ./configure PYTHON=python3 && \
    make && make install
 
-# Insatll pyds (python bindings for DeepStream)
+# Install pyds (python bindings for DeepStream)
 RUN cd /opt/nvidia/deepstream/deepstream-5.0/lib && python3 setup.py install
 
+# Upgrade here to avoid re-running on code changes
+RUN pip3 install --upgrade pip
 
-# Copy maskcam code
+# ---- Below steps are run before copying full maskcam code to allow layer caching ----
+
+# Compile YOLOv4 plugin for DeepStream
+COPY deepstream_plugin_yolov4 /deepstream_plugin_yolov4
+ENV CUDA_VER=10.2
+RUN cd /deepstream_plugin_yolov4 && make
+
+# Get TensorRT engine (pretrained YOLOv4-tiny)
+RUN wget -P / https://maskcam.s3.us-east-2.amazonaws.com/facemask_y4tiny_1024_608_fp16.trt
+
+# Install requirements with pinned versions
+COPY requirements.txt /maskcam_requirements.txt
+RUN pip3 install -r /maskcam_requirements.txt
+
+# ---- Note: all layers below this will be re-generated each time code changes ----
+# Copy full maskcam code
 COPY . /opt/maskcam_1.0/
 WORKDIR /opt/maskcam_1.0
 
-# Compile YOLOv4 plugin for DeepStream
-ENV CUDA_VER=10.2
-RUN cd /opt/maskcam_1.0/deepstream_plugin_yolov4 && make
+# Move pre-copied files to their maskcam location
+RUN rm -r deepstream_plugin_yolov4 && mv /deepstream_plugin_yolov4 .
+RUN mv /*.trt yolo/
 
 # Preload library to avoids Gst errors "cannot allocate memory in static TLS block"
 ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1
 
-# Install maskcam requirements
-RUN pip3 install --upgrade pip && pip3 install -r requirements.in -c docker/constraints.docker
-
-#get model
-RUN wget -P /opt/maskcam_1.0/yolo https://maskcam.s3.us-east-2.amazonaws.com/facemask_y4tiny_1024_608_fp16.trt
+# Un-pinned versions of maskcam requirements (comment pip3 install above before this)
+# RUN pip3 install -r requirements.in -c docker/constraints.docker
 
 # TODO: develop multiple conditional entrypoints instead of this default.
-CMD ["bash"]
+CMD ["docker/start.sh"]
 
 #TODO: figure out how/where to add nvargus-daemon
