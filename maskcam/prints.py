@@ -20,18 +20,29 @@
 # DEALINGS IN THE SOFTWARE.
 ################################################################################
 
-from datetime import datetime
-from rich import print
+import logging
+from rich.logging import RichHandler
 
+logging.basicConfig(
+    level="NOTSET",
+    format="%(message)s",
+    datefmt="|",  # Not needed w/balena, use [%X] otherwise
+    handlers=[RichHandler(markup=True)]
+)
 
-def print_process(color, name, *args, error=False, warning=False, **kwargs):
-    timestamp = f"{datetime.now():%H:%M:%S}"
+log = logging.getLogger("rich")
+
+def print_process(color, process_name, *args, error=False, warning=False, exception=False, **kwargs):
+    msg = " ".join(args)  # Concatenate all incoming strings
+    rich_msg = f"[{color}]{process_name}[/{color}] | {msg}"
     if error:
-        print(f"\n[red]{timestamp} | {name} | ERROR: [/red]", *args, "\n")
+        log.error(rich_msg)
     elif warning:
-        print(f"[yellow]{timestamp} | {name} | WARN: [/yellow]", *args, "\n")
+        log.warning(rich_msg)
+    elif exception:
+        log.exception(rich_msg)
     else:
-        print(f"[{color}]{timestamp} | {name} | [/{color}]", *args)
+        log.info(rich_msg)
 
 
 def print_run(*args, **kwargs):
