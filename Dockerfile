@@ -120,8 +120,9 @@ COPY . /opt/maskcam_1.0/
 WORKDIR /opt/maskcam_1.0
 
 # Move pre-copied files to their maskcam location
-RUN rm -r deepstream_plugin_yolov4 && mv /deepstream_plugin_yolov4 .
-RUN mv /*.trt yolo/
+# NOTE: Ignoring errors with `exit 0` to avoid breaking on balena livepush
+RUN rm -r deepstream_plugin_yolov4 && mv /deepstream_plugin_yolov4 . ; exit 0
+RUN mv /*.trt yolo/ ; exit 0
 
 # Preload library to avoids Gst errors "cannot allocate memory in static TLS block"
 ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1
@@ -129,7 +130,6 @@ ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libgomp.so.1
 # Un-pinned versions of maskcam requirements (comment pip3 install above before this)
 # RUN pip3 install -r requirements.in -c docker/constraints.docker
 
-# TODO: develop multiple conditional entrypoints instead of this default.
+RUN chmod +x docker/start.sh
+RUN chmod +x maskcam_run.py
 CMD ["docker/start.sh"]
-
-#TODO: figure out how/where to add nvargus-daemon
