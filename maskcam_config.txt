@@ -2,7 +2,7 @@
 # Detections with score below this threshold will be discarded
 detection-threshold=0.1
 # Only vote mask/no_mask when detection score is above this
-voting-threshold=0.4
+voting-threshold=0.8
 # Smaller detections (in pixels) will be discarded
 min-face-size=8
 
