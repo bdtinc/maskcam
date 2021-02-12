@@ -1,13 +1,25 @@
+
+# NOTE: Some values might be overriden via ENV vars (check maskcam/config.py)
+
 [face-processor]
 # Detections with score below this threshold will be discarded
 detection-threshold=0.1
 # Only vote mask/no_mask when detection score is above this
-voting-threshold=0.8
+voting-threshold=0.75
 # Smaller detections (in pixels) will be discarded
 min-face-size=8
 
 # Disable tracker to draw raw detections and set thresholds above
 disable-tracker=0
+
+[mqtt]
+# These are just placeholders, to enable MQTT define these env variables:
+# MQTT_BROKER_IP and MQTT_DEVICE_NAME
+mqtt-broker-ip=0
+mqtt-device-name=0
+
+mqtt-broker-port=1883
+mqtt-device-description=MaskCam @ Jetson Nano
 
 [maskcam]
 # Alert conditions
@@ -24,6 +36,7 @@ statistics-period=15
 # Time (in seconds) to restart statistics (and the whole Deepstream inference process)
 # Set to 0 to disable / 24hs = 86400 seconds
 timeout-inference-restart=86400
+inference-log-interval=300
 
 # Other valid inputs:
 #  - CSI cameras like RaspiCam:

@@ -29,7 +29,6 @@ import time
 import signal
 import platform
 import threading
-import configparser
 import multiprocessing as mp
 from datetime import datetime
 
@@ -37,6 +36,7 @@ gi.require_version("Gst", "1.0")
 gi.require_version("GstRtspServer", "1.0")
 from gi.repository import GLib, Gst, GstRtspServer
 
+from .config import config, print_config_overrides
 from .prints import print_streaming as print
 from .utils import get_ip_address, glib_cb_restart, get_streaming_address
 from .common import CODEC_MP4, CODEC_H264, CODEC_H265, CONFIG_FILE
@@ -108,7 +108,7 @@ def main(config, e_external_interrupt: mp.Event = None):
 
 
 if __name__ == "__main__":
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    config.sections()
+
+    # Print any config override by env variables to avoid confusions
+    print_config_overrides()
     main(config)

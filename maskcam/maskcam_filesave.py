@@ -29,7 +29,6 @@ import sys
 import time
 import signal
 import platform
-import configparser
 import threading
 import multiprocessing as mp
 from datetime import datetime
@@ -42,6 +41,7 @@ from gi.repository import GLib, Gst, GstRtspServer, GstBase
 from .prints import print_filesave as print
 from .common import CODEC_MP4, CODEC_H264, CODEC_H265, CONFIG_FILE
 from .utils import glib_cb_restart
+from .config import config, print_config_overrides
 
 e_interrupt = None
 
@@ -109,23 +109,15 @@ def main(
 
     if codec == CODEC_MP4:
         print("Creating MPEG-4 payload decoder")
-        rtpdepay = make_elm_or_print_err(
-            "rtpmp4vpay", "rtpdepay", "RTP MPEG-4 Payload Decoder"
-        )
-        codeparser = make_elm_or_print_err(
-            "mpeg4videoparse", "mpeg4-parser", "Code Parser"
-        )
+        rtpdepay = make_elm_or_print_err("rtpmp4vpay", "rtpdepay", "RTP MPEG-4 Payload Decoder")
+        codeparser = make_elm_or_print_err("mpeg4videoparse", "mpeg4-parser", "Code Parser")
     elif codec == CODEC_H264:
         print("Creating H264 payload decoder")
-        rtpdepay = make_elm_or_print_err(
-            "rtph264depay", "rtpdepay", "RTP H264 Payload Decoder"
-        )
+        rtpdepay = make_elm_or_print_err("rtph264depay", "rtpdepay", "RTP H264 Payload Decoder")
         codeparser = make_elm_or_print_err("h264parse", "h264-parser", "Code Parser")
     else:  # Default: H265 (recommended)
         print("Creating H265 payload decoder")
-        rtpdepay = make_elm_or_print_err(
-            "rtph265depay", "rtpdepay", "RTP H265 Payload Decoder"
-        )
+        rtpdepay = make_elm_or_print_err("rtph265depay", "rtpdepay", "RTP H265 Payload Decoder")
         codeparser = make_elm_or_print_err("h265parse", "h265-parser", "Code Parser")
 
     # Workaround for this issue: https://gitlab.freedesktop.org/gstreamer/gst-plugins-good/-/issues/410
@@ -209,9 +201,8 @@ def main(
 
 
 if __name__ == "__main__":
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    config.sections()
+    # Print any ENV var config override to avoid confusions
+    print_config_overrides()
 
     # Check arguments
     output_filename = None
@@ -223,9 +214,7 @@ if __name__ == "__main__":
 
     if not output_filename:
         output_dir = config["maskcam"]["fileserver-hdd-dir"]
-        output_filename = (
-            f"{output_dir}/{datetime.today().strftime('%Y%m%d_%H%M%S')}.mp4"
-        )
+        output_filename = f"{output_dir}/{datetime.today().strftime('%Y%m%d_%H%M%S')}.mp4"
     if not udp_port:  # Use first listed in config
         udp_port = int(config["maskcam"]["udp-ports-filesave"].split(",")[0])
     print(f"Output file: {output_filename}")

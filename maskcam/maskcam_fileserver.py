@@ -26,14 +26,13 @@ import os
 import sys
 import time
 import socket
-import configparser
 import threading
 import multiprocessing as mp
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler
 from socketserver import TCPServer, ThreadingTCPServer
 
-from .common import CONFIG_FILE
+from .config import config, print_config_overrides
 from .utils import get_ip_address
 from .prints import print_fileserver as print
 
@@ -91,9 +90,9 @@ def main(config, directory=None, e_external_interrupt: mp.Event = None):
 
 
 if __name__ == "__main__":
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    config.sections()
+
+    # Print any ENV var config override to avoid confusions
+    print_config_overrides()
 
     # Input source
     directory = sys.argv[1] if len(sys.argv) > 1 else None
