@@ -27,12 +27,15 @@ logging.basicConfig(
     level="NOTSET",
     format="%(message)s",
     datefmt="|",  # Not needed w/balena, use [%X] otherwise
-    handlers=[RichHandler(markup=True)]
+    handlers=[RichHandler(markup=True)],
 )
 
 log = logging.getLogger("rich")
 
-def print_process(color, process_name, *args, error=False, warning=False, exception=False, **kwargs):
+
+def print_process(
+    color, process_name, *args, error=False, warning=False, exception=False, **kwargs
+):
     msg = " ".join([str(arg) for arg in args])  # Concatenate all incoming strings or objects
     rich_msg = f"[{color}]{process_name}[/{color}] | {msg}"
     if error:
@@ -67,3 +70,7 @@ def print_inference(*args, **kwargs):
 
 def print_mqtt(*args, **kwargs):
     print_process("bright_green", "mqtt", *args, **kwargs)
+
+
+def print_common(*args, **kwargs):
+    print_process("white", "common", *args, **kwargs)

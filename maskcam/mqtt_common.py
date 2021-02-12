@@ -26,6 +26,7 @@ from multiprocessing import Queue
 from typing import Callable, List
 from paho.mqtt import client as paho_mqtt_client
 
+from .config import config
 from .prints import print_mqtt as print
 
 # MQTT topics
@@ -36,11 +37,20 @@ MQTT_TOPIC_ALERTS = "alerts"
 MQTT_TOPIC_FILES = "video-files"
 MQTT_TOPIC_COMMANDS = "commands"
 
-# Must come defined as environment var or MQTT gets disabled
-MQTT_BROKER_IP = os.environ.get("MQTT_BROKER_IP", None)
-MQTT_DEVICE_NAME = os.environ.get("MQTT_DEVICE_NAME", None)
-MQTT_BROKER_PORT = 1883
-MQTT_DEVICE_DESCRIPTION = "MaskCam @ Jetson Nano"
+config_broker_ip = config["mqtt"]["mqtt-broker-ip"].strip()
+config_device_name = config["mqtt"]["mqtt-device-name"].strip()
+
+# Must come defined or MQTT gets disabled
+MQTT_BROKER_IP = None
+if config_broker_ip and config_broker_ip != "0":
+    MQTT_BROKER_IP = config_broker_ip
+
+MQTT_DEVICE_NAME = None
+if config_device_name and config_device_name != "0":
+    MQTT_DEVICE_NAME = config_device_name
+
+MQTT_BROKER_PORT = int(config["mqtt"]["mqtt-broker-port"])
+MQTT_DEVICE_DESCRIPTION = config["mqtt"]["mqtt-device-description"]
 
 mqtt_msg_queue = Queue(maxsize=100)  # 100 mqtt messages stored max
 
@@ -71,9 +81,7 @@ def mqtt_connect_broker(
             if cb_success is not None:
                 cb_success(client)
             if not mqtt_send_queue(client):
-                print(
-                    f"Failed to send MQTT message queue after connecting", warning=True
-                )
+                print(f"Failed to send MQTT message queue after connecting", warning=True)
         else:
             print(f"Failed to connect to MQTT[/red], return code {code}", warning=True)
 
@@ -107,9 +115,7 @@ def mqtt_send_msg(mqtt_client, topic, message, enqueue=True):
                 print(f"{topic} | MQTT message [yellow]ENQUEUED[/yellow]")
                 mqtt_msg_queue.put_nowait({"topic": topic, "message": message})
             else:
-                print(
-                    f"{topic} | MQTT message [red]DROPPED: FULL QUEUE[/red]", error=True
-                )
+                print(f"{topic} | MQTT message [red]DROPPED: FULL QUEUE[/red]", error=True)
         else:
             print(f"{topic} | MQTT message [yellow]DISCARDED[/yellow]", warning=True)
         return False

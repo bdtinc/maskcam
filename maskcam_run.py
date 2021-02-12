@@ -29,7 +29,6 @@ import json
 import shutil
 import signal
 import threading
-import configparser
 import multiprocessing as mp
 
 # Avoids random hangs in child processes (https://pythonspeed.com/articles/python-multiprocessing/)
@@ -39,7 +38,8 @@ from rich.console import Console
 from datetime import datetime, timedelta
 
 from maskcam.prints import print_run as print
-from maskcam.common import CONFIG_FILE, USBCAM_PROTOCOL, RASPICAM_PROTOCOL
+from maskcam.config import config, print_config_overrides
+from maskcam.common import USBCAM_PROTOCOL, RASPICAM_PROTOCOL
 from maskcam.common import (
     CMD_FILE_SAVE,
     CMD_STREAMING_START,
@@ -75,9 +75,6 @@ from maskcam.maskcam_fileserver import main as fileserver_main
 from maskcam.maskcam_streaming import main as streaming_main
 
 
-config = configparser.ConfigParser()
-config.read(CONFIG_FILE)
-config.sections()
 udp_ports_pool = set()
 console = Console()
 # Use threading.Event instead of mp.Event() for sigint_handler, see:
@@ -397,6 +394,9 @@ if __name__ == "__main__":
         )
         sys.exit(0)
     try:
+        # Print any ENV var config override to avoid confusions
+        print_config_overrides()
+
         # Input source
         if len(sys.argv) > 1:
             input_filename = sys.argv[1]

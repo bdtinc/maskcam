@@ -31,7 +31,6 @@ import time
 import signal
 import platform
 import threading
-import configparser
 import numpy as np
 import multiprocessing as mp
 from rich.console import Console
@@ -44,6 +43,7 @@ from gi.repository import GLib, Gst, GstRtspServer
 
 from norfair.tracker import Tracker, Detection
 
+from .config import config, print_config_overrides
 from .prints import print_inference as print
 from .common import (
     CODEC_MP4,
@@ -61,7 +61,7 @@ PGIE_CLASS_ID_MASK = 0
 PGIE_CLASS_ID_NO_MASK = 1
 PGIE_CLASS_ID_NOT_VISIBLE = 2
 PGIE_CLASS_ID_MISPLACED = 3
-FRAMES_LOG_INTERVAL = 50
+FRAMES_LOG_INTERVAL = int(config["maskcam"]["inference-log-interval"])
 
 # Global vars
 frame_number = 0
@@ -874,10 +874,7 @@ def main(
 
 
 if __name__ == "__main__":
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    config.sections()
-
+    print_config_overrides()
     # Check input arguments
     output_filename = None
     if len(sys.argv) > 1:
