@@ -1,14 +1,24 @@
-# MaskCam [BDTi Cube]
-Adaptation of the Face Masks Detector to run on Jetson Nano using Nvidia's DeepStream.
+# MaskCam
+MaskCam is a prototype of a Jetson Nano-based smart camera system that measures crowd face mask usage in real-time, with all AI computation performed at the edge. MaskCam detects and tracks people in its field of view and determines whether they are wearing a mask via an object detection, tracking, and voting algorithm. It uploads statistics (not videos) to the cloud, where a web GUI can be used to monitor the face mask compliance in the field of view. It saves interesting video snippets to local disk (e.g., a sudden influx of lots of people not wearing masks) and can optionally stream video via RTSP.
 
-Runs object detection and tracking and reports face mask usage statistics through MQTT.
+MaskCam can be run on a Jetson Nano Developer Kit, or on a Jetson Nano SOM with the ConnectTech Photon carrier board.  It is designed to use the Raspberry Pi High Quality Camera but will also work with pretty much any USB webcam.
 
-Receives commands via MQTT to start video streaming via RTSP protocol or save video files that can be downloaded from the device using a static file server.
+The on-device software stack is mostly written in Python and runs under JetPack 4.4.1 or 4.5, Edge AI processing is handled by Nvidia’s DeepStream video analytics framework and YoloV4 Tiny, and Tryolab's Norfair tracker.  MaskCam reports statistics to and receives commands from the cloud using MQTT and a web-based GUI.
+The software is containerized and can be easily installed on a Jetson Nano DevKit using docker with just a couple of commands.  For production purposes MaskCam can run under BalenaOS, which makes it easy to manage and deploy multiple devices.
 
-## Running on Jetson Nano with Photon carrier board
-Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
+We urge you to try it out! It’s easy to install on a Jetson Nano Dev Kit and requires only a web cam. (The cloud-based statistics server and web GUI are optional, but are also dockerized and easy to instal on any reasonable Linux system, or on a low-cost AWS ec2 instance.)  See below for installation instructions.
 
-## Running on Jetson Nano Developer Kit
+MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.A., with development funded by Nvidia. MaskCam is offered under the MIT License. For more information about MaskCam, please see the forthcoming white paper from BDTI.
+
+## Running MaskCam from a Container on a Jetson Nano Developer Kit
+The easiest and fastest way to get MaskCam running on your Jetson Nano Dev Kit is using our pre-built containers.  Make sure that you have JetPack 4.4.1 or 4.5 iinstalled on your Nano DevKit and then run:
+```
+docker pull maskcam/maskcam-beta
+docker run --runtime nvidia --privileged --rm -it -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+```
+Note that the container is quite large, so it will take maybe 10 minutes to download and inistall.
+
+## Building MaskCam from Source on Jetson Nano Developer Kit
 1. Make sure these packages are installed at system level:
 ```
 sudo apt install python3-opencv python3-libnvinfer
@@ -136,6 +146,9 @@ cp backend.env.template backend.env
 docker-compose build
 docker-compose up
 ```
+
+## Running on Jetson Nano with Photon carrier board
+Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
 
 ## Convert weights generated using the original darknet implementation to TRT
  1. Clone the pytorch implementation of YOLOv4:
