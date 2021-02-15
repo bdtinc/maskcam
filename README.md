@@ -1,24 +1,92 @@
 # MaskCam
-MaskCam is a prototype of a Jetson Nano-based smart camera system that measures crowd face mask usage in real-time, with all AI computation performed at the edge. MaskCam detects and tracks people in its field of view and determines whether they are wearing a mask via an object detection, tracking, and voting algorithm. It uploads statistics (not videos) to the cloud, where a web GUI can be used to monitor the face mask compliance in the field of view. It saves interesting video snippets to local disk (e.g., a sudden influx of lots of people not wearing masks) and can optionally stream video via RTSP.
+MaskCam is a reference design for a Jetson Nano-based smart camera system that measures crowd face mask usage in real-time, with all AI computation performed at the edge. MaskCam detects and tracks people in its field of view and determines whether they are wearing a mask via an object detection, tracking, and voting algorithm. It uploads statistics (not videos) to the cloud, where a web GUI can be used to monitor the face mask compliance in the field of view. It saves interesting video snippets to local disk (e.g., a sudden influx of lots of people not wearing masks) and can optionally stream video via RTSP.
 
-MaskCam can be run on a Jetson Nano Developer Kit, or on a Jetson Nano SOM with the ConnectTech Photon carrier board.  It is designed to use the Raspberry Pi High Quality Camera but will also work with pretty much any USB webcam.
+MaskCam can be run on a Jetson Nano Developer Kit, or on a Jetson Nano SOM with the ConnectTech Photon carrier board.  It was designed to use the Raspberry Pi High Quality Camera but will also work with pretty much any USB webcam.
 
-The on-device software stack is mostly written in Python and runs under JetPack 4.4.1 or 4.5, Edge AI processing is handled by Nvidia’s DeepStream video analytics framework and YoloV4 Tiny, and Tryolab's Norfair tracker.  MaskCam reports statistics to and receives commands from the cloud using MQTT and a web-based GUI.
-The software is containerized and can be easily installed on a Jetson Nano DevKit using docker with just a couple of commands.  For production purposes MaskCam can run under BalenaOS, which makes it easy to manage and deploy multiple devices.
+The on-device software stack is mostly written in Python and runs under JetPack 4.4.1 or 4.5. Edge AI processing is handled by Nvidia’s DeepStream video analytics framework and YoloV4 Tiny, and Tryolab's Norfair tracker.  MaskCam reports statistics to and receives commands from the cloud using MQTT and a web-based GUI. The software is containerized and for evaluation can be easily installed on a Jetson Nano DevKit using docker with just a couple of commands. For production, MaskCam can run under BalenaOS, which makes it easy to manage and deploy multiple devices.
 
-We urge you to try it out! It’s easy to install on a Jetson Nano Dev Kit and requires only a web cam. (The cloud-based statistics server and web GUI are optional, but are also dockerized and easy to instal on any reasonable Linux system, or on a low-cost AWS ec2 instance.)  See below for installation instructions.
+We urge you to try it out! It’s easy to install on a Jetson Nano Dev Kit and requires only a web cam. (The cloud-based statistics server and web GUI are optional, but are also dockerized and easy to instal on any reasonable Linux system.)  See below for installation instructions.
 
 MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.A., with development funded by Nvidia. MaskCam is offered under the MIT License. For more information about MaskCam, please see the forthcoming white paper from BDTI.
 
-## Running MaskCam from a Container on a Jetson Nano Developer Kit
-The easiest and fastest way to get MaskCam running on your Jetson Nano Dev Kit is using our pre-built containers.  Make sure that you have JetPack 4.4.1 or 4.5 iinstalled on your Nano DevKit and then run:
+## Start Here! Running MaskCam from a Container on a Jetson Nano Developer Kit
+The easiest and fastest way to get MaskCam running on your Jetson Nano Dev Kit is using our pre-built containers.  You will need:
+
+1. A Jetson Nano Dev Kit running JetPack 4.4.1 or 4.5
+2. A USB webcam or RasPi HQ camera attached to your Nano
+3. Another computer with a program that can display RTSP streams -- we suggest VLC or QuickTime.
+
+On your Nano, run:
 ```
 docker pull maskcam/maskcam-beta
-docker run --runtime nvidia --privileged --rm -it -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 Note that the container is quite large, so it will take maybe 10 minutes to download and inistall.
 
+Next, run:
+```
+docker run --runtime nvidia --privileged --rm -it -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+```
+
+Now that you're at the command prompt in the container, you can start MaskCam with:
+```
+XXX John or Braulio, please upodate with your latest stuff about what a user should do to actually start MaskCam running above.
+```
+
+MaskCam will produce a whole bunch of status output (and error messages, if it encounters problems).
+
+On your other computer, run your RSTP streaming viewer (e.g., VLC) and point it to:
+```
+rtsp://aaa.bbb.ccc.ddd:8554/maskcam
+```
+
+where aaa.bbb.ccc.ddd is the IP address of your Nano. If all goes well, you should be rewarded with streaming video of your Nano, with green boxes around faces wearing masks and red boxes around faces not wearing masks.
+
+This mode just gives an idea of how MaskCam works.  But it's not sending any statistics to the cloud, since we haven't enabled that yet.  If you want to play with that, see the next section.
+
+### Troubleshooting
+If that doesn't work, take a close look at the output of maskcam when you ran it above.
+XXX Braulio, please put some suggestions here.
+
+## Setting up and Running the MQTT Broker and Web Server
+XXX Braulio, this needs to be fixed/updated/expanded.  My hacks are below.
+
+The MQTT broker and web server can be run on a Linux or OSX machine; we've tested it on Ubuntu 18.04LTS and OSX XXXversionXXX.
+
+XXX Braulio: does the server need to be run as root?
+XXX Braulio: it looks like we need postgres installed, and we'll need to set up a postgres user?  I notice in the database.env file there is stuff like POSTGRES_USER=<DATABASE_USER>, POSTGRES_PASSWORD=<...>, POSTGRES_DB=<...>
+
+On your server machine, if you don't have docker installed, you'll need to install it, as root:
+```
+XXX Braulio, commannds here
+```
+
+Then clone this repo:
+```
+git clone https://github.com/tryolabs/bdti-jetson    XXX update me!
+```
+
+Under the `server/` folder you'll find a complete implementation of a server using docker-compose,
+which contains a mosquitto broker, backend API, database, and streamlit frontend.
+
+Note that you can also run only the MQTT broker service to test the device (see section above).
+
+To create all the services for the web application, create the `.env` files using the default templates:
+```
+cd server
+cp database.env.template database.env
+cp frontend.env.template frontend.env
+cp backend.env.template backend.env
+
+docker-compose build
+docker-compose up
+```
+
+## Running on Jetson Nano with Photon carrier board
+Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
+
 ## Building MaskCam from Source on Jetson Nano Developer Kit
+*XXX Braulio, I think this should be moved to docs/Build-MaskCam-From-Source.md, no need for it here.*
+
 1. Make sure these packages are installed at system level:
 ```
 sudo apt install python3-opencv python3-libnvinfer
@@ -76,7 +144,9 @@ export MQTT_DEVICE_NAME=<unique identifier for this device>
 python3 maskcam_run.py
 ```
 
-### Sending MQTT messages
+### Sending MQTT Messages
+*XXX Braulio, I think this should be moved to docs/Send-MQTT-Commands.md, no need for it here.*
+
 If you just want to test MQTT messages and be able to send commands to the device, you might run
 the MQTT broker in your local machine and set your IP as the `MQTT_BROKER_IP`.
 
@@ -101,7 +171,9 @@ Note that you'll need to set the IP of the MQTT Broker as `127.0.0.1` if you're 
 same computer where you're running docker-compose, or set it to your computer's network address if running
 on the device (same `MQTT_BROKER_IP` that you need to run `maskcam_run.py`).
 
-### Running MaskCam standalone services
+### Running MaskCam Standalone Services
+*XXX Braulio, I think this should be moved to docs/Running-MaskCam-Standalone-Services.md, no need for it here.*
+
 When `maskcam_run.py` is run, it actually runs several processes which can be run individually:
 ```bash
 # This process runs DeepStream and generates UDP video packages to be used in other processes
@@ -122,33 +194,14 @@ The same concept applies to the static file server `maskcam_fileserver`.
 
 
 ## Running TensorRT engine on images
+*XXX Braulio, I think this and the next section should be moved to docs/MaskCam-Neural-Network-Notes.md, no need for it here.  I also think it should have some discussion about Yolo vs. Mobilenet and what you would need to do if you want to swap out one object detector for another.*
+
 After following the steps to run `maskcam` (except that you don't need DeepStream for this part),
 you might also want to test the object detector on a folder with images:
 ```
 cd yolo/
 python3 run_yolo_images.py path/to/input/folder path/to/output/folder
 ```
-
-## Setting up the web server
-Under the `server/` folder, it can be found a whole complete implementation of a server using docker-compose,
-which contains a mosquitto broker, backend API, database, and streamlit frontend.
-It can be deployed to any local or remote machine (tested on linux and OSX).
-
-Note that you can also run only the MQTT broker service to test the device (see section above).
-
-To create all the services for the web application, create the `.env` files using the default templates:
-```
-cd server
-cp database.env.template database.env
-cp frontend.env.template frontend.env
-cp backend.env.template backend.env
-
-docker-compose build
-docker-compose up
-```
-
-## Running on Jetson Nano with Photon carrier board
-Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
 
 ## Convert weights generated using the original darknet implementation to TRT
  1. Clone the pytorch implementation of YOLOv4:
