@@ -5,7 +5,7 @@ This page provides step-by-step instructions for setting up the Jetson Nano Deve
 ## Setup Instructions
 
 ### 1. Create balena account
-Evan can work on this part
+Evan or John can work on this part
 
 
 ### 2. Create new application and device on balena dashboard
@@ -17,6 +17,7 @@ Evan or John can work on this part. This part includes using balena dashboard to
 
 
 ### 4. Running MaskCam on device
-
+Evan or John can work on this part.
+Still need to test out Braulio's new code that automatically starts MaskCam on powerup to see how it works.
 
 ### What else?
