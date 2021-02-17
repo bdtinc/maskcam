@@ -5,7 +5,7 @@ This page provides step-by-step instructions for setting up the Connect Tech Pho
 ## Setup Instructions
 
 ### 1. Create balena account
-Evan can work on this part
+Evan or John can work on this part
 
 
 ### 2. Create new application and device on balena dashboard
