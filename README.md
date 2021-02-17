@@ -5,7 +5,7 @@ MaskCam can be run on a Jetson Nano Developer Kit, or on a Jetson Nano SOM with 
 
 The on-device software stack is mostly written in Python and runs under JetPack 4.4.1 or 4.5. Edge AI processing is handled by Nvidia’s DeepStream video analytics framework and YoloV4 Tiny, and Tryolab's Norfair tracker.  MaskCam reports statistics to and receives commands from the cloud using MQTT and a web-based GUI. The software is containerized and for evaluation can be easily installed on a Jetson Nano DevKit using docker with just a couple of commands. For production, MaskCam can run under BalenaOS, which makes it easy to manage and deploy multiple devices.
 
-We urge you to try it out! It’s easy to install on a Jetson Nano Dev Kit and requires only a web cam. (The cloud-based statistics server and web GUI are optional, but are also dockerized and easy to instal on any reasonable Linux system.)  See below for installation instructions.
+We urge you to try it out! It’s easy to install on a Jetson Nano Dev Kit and requires only a web cam. (The cloud-based statistics server and web GUI are optional, but are also dockerized and easy to install on any reasonable Linux system.)  [See below for installation instructions.](https://github.com/tryolabs/bdti-jetson#start-here-running-maskcam-from-a-container-on-a-jetson-nano-developer-kit)
 
 MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.A., with development funded by Nvidia. MaskCam is offered under the MIT License. For more information about MaskCam, please see the forthcoming white paper from BDTI.
 
