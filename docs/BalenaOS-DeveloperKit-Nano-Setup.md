@@ -1,5 +1,5 @@
-# Photon Nano Setup Instructions for MaskCam
-This page provides step-by-step instructions for setting up the Developer Kit Jetson Nano with balenaOS rather than NVIDIA's JetPack OS. BalenaOS is a barebones host operating system optimized for running Docker containers. It allows MaskCam to easily be installed as a container and remotely updated or configured.
+# BalenaOS Developer Kit Nano Setup Instructions for MaskCam
+This page provides step-by-step instructions for setting up the Jetson Nano Developer Kit with balenaOS, rather than NVIDIA's JetPack OS. BalenaOS is a barebones host operating system optimized for running Docker containers. It allows MaskCam to easily be installed as a container and remotely updated or configured.
 
 
 ## Setup Instructions
