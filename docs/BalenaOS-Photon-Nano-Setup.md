@@ -26,6 +26,7 @@ This part also needs to show how to configure the device in balena dashboard so 
 
 
 ### 4. Running MaskCam on device
-Instructions for connecting to device via balena dashboard or over SSH, and issuing commands to configure/run MaskCam.
+Evan or John can work on this part.
+Still need to test out Braulio's new code that automatically starts MaskCam on powerup to see how it works.
 
 ### What else?
