@@ -84,65 +84,23 @@ docker-compose up
 ## Running on Jetson Nano with Photon carrier board
 Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
 
-## Building MaskCam from Source on Jetson Nano Developer Kit
-*XXX Braulio, I think this should be moved to docs/Build-MaskCam-From-Source.md, no need for it here.*
+## Developing and Building MaskCam from Source on Jetson Nano Developer Kit
+The easiest way to get Maskcam running or set up for development purposes, is by using a container like the one provided in the main [Dockerfile](Dockerfile), which provides the right versions of the OS (Ubuntu 18.04 / Bionic Beaver) and all the system level packages required (mainly NVIDIA L4T packages, GStreamer and DeepStream among others).
 
-1. Make sure these packages are installed at system level:
+For development, you could make modifications to the code or the container definition, and then rebuild locally using:
 ```
-sudo apt install python3-opencv python3-libnvinfer
-```
-
-2. Clone this repo:
-```
-git clone git@github.com:tryolabs/bdti-jetson.git
+docker build . -t maskcam_custom
 ```
 
-3. Install the requirements listed on `requirements.in` (currently not freezed) **without dependencies** to avoid installing python-opencv (which is already installed system-level):
+The above building step could be executed in the target Jetson Nano device (easier), or in another development environment (i.e: pushing the result to [Docker Hub](https://hub.docker.com/) and then pulling from device).
+
+Either way, once the image is ready on the device, remember to run the container using the `--runtime nvidia` and `--privileged` flags (to access the camera device), and mapping the used ports (MQTT -1883-, static file serving -8080- and streaming -8554-, as defined in [maskcam_config.txt](maskcam_config.txt)):
 ```
-pip3 install --no-deps -r requirements.in
-```
-
-4. Install Nvidia DeepStream:
-Aside from the system requirements of th previous step, you also need to install
-[DeepStream 5.0](https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_Quickstart.html#jetson-setup) 
-(no need to install Kafka protocol adaptor)
-and also make sure to install the corresponding **python bindings** for GStreamer
-[gst-python](https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_Python_Sample_Apps.html#python-bindings),
-and for DeepStream [pyds](https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_Python_Sample_Apps.html#metadata-access).
-
-5. Compile YOLOv4 plugin for DeepStream:
-After installing DeepStream, compile the YOLOv4 plugin for DeepStream:
-```
-cd <this repo path>/deepstream_plugin_yolov4
-export CUDA_VER=10.2
-make
-```
-If all went well, you should see a library `libnvdsinfer_custom_impl_Yolo.so` in that directory.
-
-6. Download TensorRT engine file from [here](https://drive.google.com/file/d/1Qb6f2VNXE15EgIi6roebgSo8XZuAPQxi/view?usp=sharing) and save it as `yolo/facemask_y4tiny_1024_608_fp16.trt`.
-
-7. Now you should be ready to run. By default, the device `/dev/video0` will be used, but other devices can be set as first argument:
-```bash
-# Use default input camera /dev/video0
-python3 maskcam_run.py
-
-# Equivalent as above:
-python3 maskcam_run.py v4l2:///dev/video0
-
-# Process an mp4 file instead (no network functions, MQTT and static file server disabled)
-python3 maskcam_run.py file:///path/to/video.mp4
-
-# Read from Raspi2 camera using device-id
-python3 maskcam_run.py argus:///0
+docker run --runtime nvidia --privileged --rm -it -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam_custom
 ```
 
-8. If you want to add an MQTT broker, set the following environment variables:
-```bash
-export MQTT_BROKER_IP=<server ip>
-export MQTT_DEVICE_NAME=<unique identifier for this device>
+However, if you want to better understand the [Dockerfile](Dockerfile), or you need to run natively and are willing to deal with version conflicts, please see the dependencies manual installation and building instructions at [docs/Manual-Dependency-Installation.md](docs/Manual-Dependency-Installation.md)
 
-python3 maskcam_run.py
-```
 
 ### Sending MQTT Messages
 *XXX Braulio, I think this should be moved to docs/Send-MQTT-Commands.md, no need for it here.*
