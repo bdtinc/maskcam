@@ -490,10 +490,12 @@ def show_troubleshooting():
 
     [yellow]If the error is like: v4l-camera-source / reason not-negotiated[/yellow]
     [green]Solution:[/green] configure camera capabilities
-    Run the script under utils/gst_capabilities.sh and find a line with type
-    video/x-raw, and a framerate below 14, e.g: 10/1 or 5/1.
+    Run the script under utils/gst_capabilities.sh and find the lines with type
+    video/x-raw ...
+    Find a suitable framerate=X/1 (with X being an integer like 24, 15, etc.)
     Then edit config_maskcam.txt and change the line:
-    camera-framerate=10/1
+    camera-framerate=X
+    Or configure using --env MASKCAM_CAMERA_FRAMERATE=X (see README)
 
     [yellow]If the error is like:
     /usr/lib/aarch64-linux-gnu/libgomp.so.1: cannot allocate memory in static TLS block[/yellow]
