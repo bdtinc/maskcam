@@ -31,7 +31,7 @@ docker run --runtime nvidia --privileged --rm -it -p 1883:1883 -p 8080:8080 -p 8
 The container should start running the `maskcam_run.py` script with the default input device (`/dev/video0`).
 
 MaskCam will produce a whole bunch of status output (and error messages, if it encounters problems).
-If there are errors, the process will finish after a couple seconds (check [Troubleshooting](Troubleshooting)).
+If there are errors, the process will finish after a couple seconds (check [Troubleshooting](#troubleshooting)).
 
 If you don't see any errors, you can run your RSTP streaming viewer (e.g., VLC) on another computer and point it to:
 ```
@@ -39,7 +39,8 @@ rtsp://aaa.bbb.ccc.ddd:8554/maskcam
 ```
 
 where aaa.bbb.ccc.ddd is the IP address of your Nano. 
-**NOTE:** if you scroll up through the MaskCam output, you should see a message like `Streaming at rtsp://192.168.0.2:8554/maskcam`,
+
+**Note:** if you scroll up through the MaskCam output, you should see a message like `Streaming at rtsp://192.168.0.2:8554/maskcam`,
 which you can copy-paste as the network URL, as long as you're in the same network that your device.
 
 If all goes well, you should be rewarded with streaming video of your Nano, with green boxes around faces wearing masks and red boxes around faces not wearing masks.
@@ -80,6 +81,12 @@ For example, if you want to set an input device other than `/dev/video0`, you ca
 docker run --runtime nvidia --privileged --rm -it --env MASKCAM_INPUT=v4l2:///dev/video1 -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
+If you have an MQTT server already set-up (like shown in section [below](#setting-up-and-running-the-mqtt-broker-and-web-server)), you need to define
+two environment variables so that your device is able to find it and identify itself:
+```
+docker run ... --env MQTT_BROKER_IP=<server IP> MQTT_DEVICE_NAME=<a-unique-string-you-like> ...
+```
+
 There are many other options that may be set using environment variables, which override the values written in the [maskcam_config.txt](maskcam_config.txt) file.
 
 You might want to take a look at that configuration file for a brief comment on what they do, and then check the [maskcam/config.py](maskcam/config.py) file to see all
@@ -113,7 +120,7 @@ If you don't have another camera, try running the script under utils/gst_capabil
 `video/x-raw ...`
 
 Find any suitable `framerate=X/1` (with `X` being an integer like 24, 15, etc.)
-and set the corresponding configuration parameter with `--env MASKCAM_CAMERA_FRAMERATE=X` (see [previous section](Setting-configuration-parameters)).
+and set the corresponding configuration parameter with `--env MASKCAM_CAMERA_FRAMERATE=X` (see [previous section](#setting-configuration-parameters)).
 
 #### Error: Streaming or file server are not accessible (nothing else seems to fail)
 Make sure you're mapping the right ports from the container, with the `-p container_port:host_port` parameters indicated in the previous sections.
@@ -126,7 +133,7 @@ mqtt-broker-port=1883
 ```
 And that's why we're using `docker run ...  -p 1883:1883 -p 8080:8080 -p 8554:8554 ...` in the previous sections.
 
-Remember that all these ports can be overriden using environment variables, as described in the [previous section](Setting-configuration-parameters).
+Remember that all these ports can be overriden using environment variables, as described in the [previous section](#setting-configuration-parameters).
 
 Other ports like `udp-port-*` are not intended to be accessible from outside the container, they are used for communication between the inference process and the streaming and file-saving processes.
 
@@ -139,38 +146,57 @@ If you find that the container fails systematically after running some sequence,
 to report an Issue with the relevant context and we'll try to reproduce and fix it.
 
 ## Setting up and Running the MQTT Broker and Web Server
-XXX Braulio, this needs to be fixed/updated/expanded.  My hacks are below.
+The MQTT broker and web server can be run on a Linux or OSX machine; we've tested it on Ubuntu 18.04LTS and OSX Big Sur.
 
-The MQTT broker and web server can be run on a Linux or OSX machine; we've tested it on Ubuntu 18.04LTS and OSX XXXversionXXX.
+The server consists of a couple docker containers, that run together using [docker-compose](https://docs.docker.com/compose/install/) (follow installation instructions for your platform before continuing).
 
-XXX Braulio: does the server need to be run as root?
-XXX Braulio: it looks like we need postgres installed, and we'll need to set up a postgres user?  I notice in the database.env file there is stuff like POSTGRES_USER=<DATABASE_USER>, POSTGRES_PASSWORD=<...>, POSTGRES_DB=<...>
-
-On your server machine, if you don't have docker installed, you'll need to install it, as root:
+On the server, you only need to install docker-compose, everything else will be installed automatically and run in the containers.
+So, after installing it, clone this repo:
 ```
-XXX Braulio, commannds here
+git clone <copy https or ssh url>.git
 ```
 
-Then clone this repo:
-```
-git clone https://github.com/tryolabs/bdti-jetson    XXX update me!
-```
+Go to the `server/` folder where you've a complete implementation of the server in four different containers:
+the mosquitto broker, backend API, database, and streamlit frontend.
 
-Under the `server/` folder you'll find a complete implementation of a server using docker-compose,
-which contains a mosquitto broker, backend API, database, and streamlit frontend.
-
-Note that you can also run only the MQTT broker service to test the device (see section above).
-
-To create all the services for the web application, create the `.env` files using the default templates:
+These containers are configured using environment variables, create the `.env` files using the default templates:
 ```
 cd server
 cp database.env.template database.env
 cp frontend.env.template frontend.env
 cp backend.env.template backend.env
-
-docker-compose build
-docker-compose up
 ```
+
+The only file that needs some edition from you, is `database.env`. Here are some example values, but you better be more creative for security reasons:
+```
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=some_password
+POSTGRES_DB=maskcam
+```
+
+After editing the database environment file, you're ready to build all the containers and run them in a single command:
+
+```
+docker-compose up -d
+```
+
+*NOTE:* If you want to change any of the `database.env` values after building the containers, the easiest thing to do is to delete the `pgdata` volume, and you'll
+also delete all stored database information and statistics, if any (run `docker volume rm pgdata`).
+
+After all containers are built and running, you should be able to see the frontend, using your remote or local server's IP. Open a browser, and visit:
+```
+http://<server IP>:8501/
+```
+
+After configuring this server (locally or in an AWS EC2 instance with public IP), you need to set its IP in the Jetson Device you want to register:
+```
+docker run --runtime nvidia --privileged --rm -it --env MQTT_BROKER_IP=<server IP> MQTT_DEVICE_NAME=my-jetson-1 -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+```
+
+And that's it. If the device has access to the broker's IP, then you should see in the output logs some successful connection messages and then see your device listed
+in the drop-down menu of the frontend (reload the page if you don't see it). In the frontend, select `Group data by: Second` and hit `Refresh status` to see how the plot
+changes when new data arrives.
+
 
 ## Running on Jetson Nano with Photon carrier board
 Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
