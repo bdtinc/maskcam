@@ -81,6 +81,10 @@ fileserver-ram-dir=/dev/shm
 # Use /tmp/* to clean saved videos on system reboot
 fileserver-hdd-dir=/tmp/saved_videos
 
+# IP address that this device will show in info messages (logs and web frontend, for streaming and file downloading)
+# The preferred method to set this is through env variable (MASKCAM_DEVICE_IP)
+device-ip=auto
+
 [property]
 interval=0
 gpu-id=0

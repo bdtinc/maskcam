@@ -11,6 +11,7 @@ config.sections()
 # Each row is: (ENV_VAR_NAME, (config-section, config-param))
 ENV_CONFIG_OVERRIDES = (
     ("MASKCAM_INPUT", ("maskcam", "default-input")),  # Redundant with start.sh script
+    ("MASKCAM_DEVICE_IP", ("maskcam", "device-ip")),
     ("MASKCAM_DETECTION_THRESHOLD", ("face-processor", "detection-threshold")),
     ("MASKCAM_VOTING_THRESHOLD", ("face-processor", "voting-threshold")),
     ("MASKCAM_MIN_FACE_SIZE", ("face-processor", "min-face-size")),
