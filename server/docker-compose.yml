@@ -2,7 +2,7 @@ version: '3.1'
 services:
 
   db:
-    image: postgres
+    image: postgres:13.2
     env_file:
       - database.env
     volumes:
@@ -11,7 +11,7 @@ services:
       - 5432:5432
 
   mosquitto:
-    image: eclipse-mosquitto
+    image: eclipse-mosquitto:2.0.7
     ports:
       - 1883:1883
       - 8883:8883
@@ -19,6 +19,7 @@ services:
       - mosquitto-data:/mosquitto/data
       - mosquitto-logs:/mosquitto/logs
       - mosquitto-conf:/mosquitto/config
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
     restart: unless-stopped
 
   backend:
