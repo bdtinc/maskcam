@@ -23,9 +23,7 @@
 import os
 import json
 
-import pandas as pd
 import streamlit as st
-from streamlit.report_thread import add_report_ctx
 
 from datetime import datetime, time, timezone
 from session_manager import get_state
@@ -37,7 +35,6 @@ from utils.api_utils import (
 )
 from utils.format_utils import create_chart, format_data
 
-from paho.mqtt import publish as mqtt_publish
 from paho.mqtt import client as mqtt_client
 
 MQTT_BROKER = os.environ["MQTT_BROKER"]
@@ -56,6 +53,7 @@ CMD_REQUEST_STATUS = "status_request"
 
 state = get_state()
 
+
 def display_sidebar(all_devices, state):
     """
     Display sidebar information.
@@ -64,9 +62,7 @@ def display_sidebar(all_devices, state):
     state.selected_device = st.sidebar.selectbox(
         "Selected device",
         all_devices,
-        index=all_devices.index(
-            state.selected_device if state.selected_device else None
-        ),
+        index=all_devices.index(state.selected_device if state.selected_device else None),
     )
 
     st.sidebar.subheader("Filters")
@@ -106,24 +102,33 @@ def display_device(state):
     device = get_device(selected_device)
 
     if device is None:
-        st.write(
-            "Seems that something went wrong while getting the device information, please select another device."
-        )
+        st.write("Seems that something went wrong while getting the device information.")
     else:
         st.header(f"Device: {device['id']}")
 
         if state.mqtt_last_status:
-            status = state.mqtt_last_status # shortcut
+            status = state.mqtt_last_status  # shortcut
+            if not status["device_ip"]:
+                st.write(
+                    ":warning: **Set MASKCAM_DEVICE_IP on the device to enable "
+                    "streaming and file download links**"
+                )
             device_status = st.beta_container()
             col1, col2 = device_status.beta_columns(2)
-            col1.write("🟢 Device connected "
-                        f"*(Last update: {status['time']})*")
-            if not status['streaming_address'] or status['streaming_address'] == "N/A":
-                col2.write(f":red_circle: Streaming is stopped")
+            col1.write("🟢 Device connected " f"*(Last update: {status['time']})*")
+            if not status["streaming_address"] or status["streaming_address"] == "N/A":
+                col2.write(":red_circle: Streaming is stopped")
             else:
-                col2.write(f"🟢 <a href=\"{status['streaming_address']}\" target=\"_blank\">"
+                if status["device_ip"]:
+                    col2.write(
+                        f"🟢 <a href=\"{status['streaming_address']}\" target=\"_blank\">"
                         "Streaming enabled</a>",
-                        unsafe_allow_html=True)
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    col2.write(
+                        "🟢 Streaming enabled (device IP unknown)",
+                    )
             device_status.write(
                 f"**Save videos: {status['save_current_files']}**"
                 f" | *Inference runtime: {status['inference_runtime']}*"
@@ -137,7 +142,6 @@ def display_device(state):
                 send_mqtt_command(device["id"], CMD_REQUEST_STATUS, mqtt_status)
             else:
                 mqtt_set_status(mqtt_status, state.mqtt_status)
-
 
         cols = st.beta_columns(6)
         # Buttons from right to left
@@ -167,14 +171,10 @@ def display_device(state):
         if len(date_filter) == 2:
             datetime_from = f"{date_filter[0]}T{state.from_time}"
             datetime_to = f"{date_filter[1]}T{state.to_time}"
-            device_statistics = get_statistics_from_to(
-                selected_device, datetime_from, datetime_to
-            )
+            device_statistics = get_statistics_from_to(selected_device, datetime_from, datetime_to)
 
         if not device_statistics:
-            st.write(
-                "The selected device has no statistics to show for the given filters."
-            )
+            st.write("The selected device has no statistics to show for the given filters.")
         else:
             reports, alerts = format_data(device_statistics, state.group_data_by)
 
@@ -187,34 +187,41 @@ def display_device(state):
                     report_chart = create_chart(reports=reports)
                     st.plotly_chart(report_chart, use_container_width=True)
                 else:
-                    st.write(
-                        "The selected device has no reports to show for the given filters."
-                    )
+                    st.write("The selected device has no reports to show for the given filters.")
 
                 st.subheader("Alerts")
                 if alerts:
                     alerts_chart = create_chart(alerts=alerts)
                     st.plotly_chart(alerts_chart, use_container_width=True)
                 else:
-                    st.write(
-                        "The selected device has no alerts to show for the given filters."
-                    )
+                    st.write("The selected device has no alerts to show for the given filters.")
         device_files = get_device_files(device_id=selected_device)
         st.subheader("Saved video files on device")
         if not device_files:
             st.write("The selected device has no saved files yet")
         else:
+            server_address = None
             if not state.mqtt_last_status:
                 st.write(":warning: **Downloads will fail since device is NOT connected**")
+            elif state.mqtt_last_status["device_ip"] is None:
+                st.write(
+                    ":warning: **Set MASKCAM_DEVICE_IP on the device to enable download links**"
+                )
+            else:  # file_server_address is only valid when device_ip = MASKCAM_DEVICE_IP is set
+                server_address = f"{device['file_server_address']}"
             for file_instance in device_files:
-                url = f"{device['file_server_address']}/{file_instance['video_name']}"
-                st.markdown(f"[{file_instance['video_name']}]({url})")
+                if server_address:
+                    url = f"{server_address}/{file_instance['video_name']}"
+                    st.markdown(f"[{file_instance['video_name']}]({url})")
+                else:
+                    st.markdown(f"{file_instance['video_name']}")
 
 
 def mqtt_set_status(mqtt_status, text):
     state.mqtt_status = text
     mqtt_status.empty()
     mqtt_status.markdown(f"**MQTT status:** {text}")
+
 
 def _on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -233,17 +240,20 @@ def _on_message(client, userdata, msg):
 
     state.mqtt_last_status = message
 
+
 @st.cache(allow_output_mutation=True)
 def restore_client():
     client = mqtt_client.Client(MQTT_CLIENT_ID)
     client.connect(MQTT_BROKER, MQTT_BROKER_PORT)
     return client
 
+
 def get_mqtt_client():
     client = restore_client()
     client.on_connect = _on_connect
     client.on_message = _on_message
     return client
+
 
 def mqtt_wait_connection(client, timeout):
     while not state.mqtt_connected and timeout:
@@ -255,9 +265,6 @@ def mqtt_wait_response(client, timeout):
     while not state.mqtt_last_status and timeout:
         client.loop(timeout=1)
         timeout -= 1
-
-def mqtt_connect_and_subscribe(topics, mqtt_status):
-    return client
 
 
 def send_mqtt_message_wait_response(topic, message, mqtt_status):
@@ -301,7 +308,7 @@ def send_mqtt_message_wait_response(topic, message, mqtt_status):
         mqtt_wait_response(client, 5)
         if not state.mqtt_last_status:
             mqtt_set_status(mqtt_status, ":red_circle: Device not responding")
-        
+
     except Exception as e:
         mqtt_set_status(mqtt_status, f":red_circle: Could not connect to MQTT broker: {e}")
 
@@ -310,6 +317,7 @@ def send_mqtt_command(device_id, command, mqtt_status):
     send_mqtt_message_wait_response(
         MQTT_TOPIC_COMMANDS, {"device_id": device_id, "command": command}, mqtt_status
     )
+
 
 def main():
     st.set_page_config(page_title="Maskcam")
