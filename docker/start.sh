@@ -4,8 +4,8 @@ nvargus-daemon &
 echo
 echo "Provided input:"
 echo " - MASKCAM_INPUT = $MASKCAM_INPUT"
-echo "Device IP:"
-echo " - MASKCAM_DEVICE_IP = $MASKCAM_DEVICE_IP"
+echo "Device Address:"
+echo " - MASKCAM_DEVICE_ADDRESS = $MASKCAM_DEVICE_ADDRESS"
 echo "Development mode:"
 echo " - DEV_MODE = $DEV_MODE"
 echo

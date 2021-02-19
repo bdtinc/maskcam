@@ -46,11 +46,13 @@ On your Nano, run:
 # This will take 10 minutes or more to download
 docker pull maskcam/maskcam-beta
 ```
+Optionally (recommended), find your Jetson IP address (e.g: using `ifconfig`).
+This will allow generating a valid streaming address that you can copy-paste later, and useful links in the web server.
 
-Next, make sure to connect the camera and start!
+Now make sure to connect the camera and start!
 ```
 # Connect power supply before running this!
-docker run --runtime nvidia --privileged --rm -it -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+docker run --runtime nvidia --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=<optional-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
 The container should start running the `maskcam_run.py` script with the default input device (`/dev/video0`).
@@ -61,40 +63,37 @@ If there are errors, the process will finish after a couple seconds (check [Trou
 Otherwise, leave it running (don't press `Ctrl+C`), and continue to the next section to visualize the video!
 
 ### Viewing the video streaming
-If you don't see any errors, you can run your RSTP streaming viewer (e.g., VLC) on another computer and point it to:
-```
-rtsp://aaa.bbb.ccc.ddd:8554/maskcam
-```
+If you scroll through the logs and don't see any errors, you should find a message like:
 
-where aaa.bbb.ccc.ddd is the IP address of your Nano. 
-To find out your device's IP, scroll up through the MaskCam output and find a message like
+```Streaming at rtsp://aaa.bbb.ccc.ddd:8554/maskcam```
 
-```Streaming at rtsp://192.168.0.2:8554/maskcam```
+where `aaa.bbb.ccc.ddd` is the address that you provided in `MASKCAM_DEVICE_ADDRESS` previously (otherwise you'll see some unknown address label there).
 
-which you can copy-paste as the network URL, as long as you're in the same network that your device.
-
-If all goes well, you should be rewarded with streaming video of your Nano, with green boxes around faces wearing masks and red boxes around faces not wearing masks.
+You can copy-paste that URL into your RSTP streaming viewer (e.g., VLC) on another computer, and if all goes well,
+you should be rewarded with streaming video of your Nano, with green boxes around faces wearing masks and red boxes around faces not wearing masks.
 
 This mode just gives an idea of how MaskCam works. But it's not sending any statistics to the cloud, since we haven't enabled that yet.  If you want to play with that, you'll need to set up an MQTT server, which is covered in the [next sections](#setting-up-and-running-the-mqtt-broker-and-web-server).
 
 ### Setting device configuration parameters
-The easiest way to configure parameters (without rebuilding the container or running manually and changing the config file each time), is through environment variables.
-For example, if you want to set an input device other than `/dev/video0`, you can define `MASKCAM_INPUT`:
+The easiest way to configure parameters (without rebuilding the container or running manually and changing the config file each time), is through environment variables,
+like we did with `MASKCAM_DEVICE_ADDRESS`.
+
+Options set using environment variables will **override** the default values specified in [maskcam_config.txt](maskcam_config.txt).
+The mapping between variable names and config file entries is defined in [maskcam/config.py](maskcam/config.py).
+
+For example, if you want to set an input device other than `/dev/video0`, you can define `MASKCAM_INPUT`.
 
 ```
-docker run --runtime nvidia --privileged --rm -it --env MASKCAM_INPUT=v4l2:///dev/video1 -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+docker run --runtime nvidia --privileged --rm -it --env MASKCAM_INPUT=v4l2:///dev/video1 --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
 If you have an MQTT server already set-up (like shown in section [below](#setting-up-and-running-the-mqtt-broker-and-web-server)), you need to define
 two environment variables so that your device is able to find it and identify itself:
 ```
-docker run ... --env MQTT_BROKER_IP=<server IP> MQTT_DEVICE_NAME=<a-unique-string-you-like> ...
+docker run ... --env MQTT_BROKER_IP=<server IP> --env MQTT_DEVICE_NAME=<a-unique-string-you-like> --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip>...
 ```
 
-There are many other options that may be set using environment variables, which override the values written in the [maskcam_config.txt](maskcam_config.txt) file.
-
-You might want to take a look at that configuration file for a brief comment on what they do, and then check the [maskcam/config.py](maskcam/config.py) file to see all
-the names of the environment variables that can be used to override these values when running the container (instead of modifying the file in the container).
+*If you have too many `--env` variables to add, it might be handy to use docker's `--env-file` instead.*
 
 ### Troubleshooting
 MaskCam actually consists of many different processes running in parallel. As a consequence, when there's an error on a particular process, all of them will be sent termination signals
@@ -206,8 +205,8 @@ outbound traffic, and from your Jetson Device (see [next section](#checking-mqtt
 you just need to set the server IP and a name on your device:
 
 ```
-# Run with MQTT_BROKER_IP and MQTT_DEVICE_NAME
-docker run --runtime nvidia --privileged --rm -it --env MQTT_BROKER_IP=<server IP> MQTT_DEVICE_NAME=my-jetson-1 -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+# Run with MQTT_BROKER_IP, MQTT_DEVICE_NAME, and MASKCAM_DEVICE_ADDRESS
+docker run --runtime nvidia --privileged --rm -it --env MQTT_BROKER_IP=<server IP> --env MQTT_DEVICE_NAME=my-jetson-1 --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
 And that's it. If the device has access to the broker's IP, then you should see in the output logs some successful connection messages and then see your device listed

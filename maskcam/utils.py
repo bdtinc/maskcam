@@ -23,13 +23,13 @@
 from .config import config
 from gi.repository import GLib
 
-IP_UNKNOWN_LABEL = "<device-ip-not-configured>"
+ADDRESS_UNKNOWN_LABEL = "<device-address-not-configured>"
 
 
 def get_ip_address():
-    result_value = config["maskcam"]["device-ip"].strip()
+    result_value = config["maskcam"]["device-address"].strip()
     if not result_value or result_value == "0":
-        result_value = IP_UNKNOWN_LABEL
+        result_value = ADDRESS_UNKNOWN_LABEL
     return result_value
 
 

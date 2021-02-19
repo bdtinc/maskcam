@@ -108,9 +108,9 @@ def display_device(state):
 
         if state.mqtt_last_status:
             status = state.mqtt_last_status  # shortcut
-            if not status["device_ip"]:
+            if not status["device_address"]:
                 st.write(
-                    ":warning: **Set MASKCAM_DEVICE_IP on the device to enable "
+                    ":warning: **Set MASKCAM_DEVICE_ADDRESS on the device to enable "
                     "streaming and file download links**"
                 )
             device_status = st.beta_container()
@@ -119,7 +119,7 @@ def display_device(state):
             if not status["streaming_address"] or status["streaming_address"] == "N/A":
                 col2.write(":red_circle: Streaming is stopped")
             else:
-                if status["device_ip"]:
+                if status["device_address"]:
                     col2.write(
                         f"🟢 <a href=\"{status['streaming_address']}\" target=\"_blank\">"
                         "Streaming enabled</a>",
@@ -127,7 +127,7 @@ def display_device(state):
                     )
                 else:
                     col2.write(
-                        "🟢 Streaming enabled (device IP unknown)",
+                        "🟢 Streaming enabled (unknown device address)",
                     )
             device_status.write(
                 f"**Save videos: {status['save_current_files']}**"
@@ -203,11 +203,11 @@ def display_device(state):
             server_address = None
             if not state.mqtt_last_status:
                 st.write(":warning: **Downloads will fail since device is NOT connected**")
-            elif state.mqtt_last_status["device_ip"] is None:
+            elif state.mqtt_last_status["device_address"] is None:
                 st.write(
-                    ":warning: **Set MASKCAM_DEVICE_IP on the device to enable download links**"
+                    ":warning: **Set MASKCAM_DEVICE_ADDRESS on device to enable download links**"
                 )
-            else:  # file_server_address is only valid when device_ip = MASKCAM_DEVICE_IP is set
+            else:  # file_server_address is valid when device_address=MASKCAM_DEVICE_ADDRESS is set
                 server_address = f"{device['file_server_address']}"
             for file_instance in device_files:
                 if server_address:

@@ -49,7 +49,7 @@ from maskcam.common import (
 )
 from maskcam.utils import (
     get_ip_address,
-    IP_UNKNOWN_LABEL,
+    ADDRESS_UNKNOWN_LABEL,
     load_udp_ports_filesaving,
     get_streaming_address,
     format_tdelta,
@@ -190,8 +190,8 @@ def mqtt_say_hello(mqtt_client):
 
 def mqtt_send_device_status(mqtt_client):
     t_now = datetime.now()
-    device_ip = get_ip_address()
-    is_valid_ip = device_ip != IP_UNKNOWN_LABEL
+    device_address = get_ip_address()
+    is_valid_address = device_address != ADDRESS_UNKNOWN_LABEL
     if P_INFERENCE in processes_info and processes_info[P_INFERENCE]["running"]:
         inference_runtime = t_now - processes_info[P_INFERENCE]["started"]
     else:
@@ -202,7 +202,7 @@ def mqtt_send_device_status(mqtt_client):
         fileserver_runtime = None
     if P_STREAMING in processes_info and processes_info[P_STREAMING]["running"]:
         streaming_address = get_streaming_address(
-            device_ip,
+            device_address,
             config["maskcam"]["streaming-port"],
             config["maskcam"]["streaming-path"],
         )
@@ -218,7 +218,7 @@ def mqtt_send_device_status(mqtt_client):
             "inference_runtime": format_tdelta(inference_runtime),
             "fileserver_runtime": format_tdelta(fileserver_runtime),
             "streaming_address": streaming_address,
-            "device_ip": device_ip if is_valid_ip else None,
+            "device_address": device_address if is_valid_address else None,
             "save_current_files": f"{keep_n}/{total_fsave}",
             "time": f"{t_now:%H:%M:%S}",
         },
