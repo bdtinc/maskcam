@@ -50,6 +50,7 @@ from maskcam.common import (
 )
 from maskcam.utils import (
     get_ip_address,
+    IP_UNKNOWN_LABEL,
     load_udp_ports_filesaving,
     get_streaming_address,
     format_tdelta,
@@ -124,10 +125,11 @@ def terminate_process(name, process, e_interrupt_process, delete_info=False):
             warning=True,
         )
         process.terminate()
-    if delete_info:
-        del processes_info[name]  # Sequential processes, avoid filling memory
-    else:
-        processes_info[name].update({"ended": datetime.now(), "running": False})
+    if name in process_info:
+        if delete_info:
+            del processes_info[name]  # Sequential processes, avoid filling memory
+        else:
+            processes_info[name].update({"ended": datetime.now(), "running": False})
     print(f"Process terminated: [yellow]{name}[/yellow]\n")
 
 
@@ -189,6 +191,8 @@ def mqtt_say_hello(mqtt_client):
 
 def mqtt_send_device_status(mqtt_client):
     t_now = datetime.now()
+    device_ip = get_ip_address()
+    is_valid_ip = device_ip != IP_UNKNOWN_LABEL
     if P_INFERENCE in processes_info and processes_info[P_INFERENCE]["running"]:
         inference_runtime = t_now - processes_info[P_INFERENCE]["started"]
     else:
@@ -199,7 +203,7 @@ def mqtt_send_device_status(mqtt_client):
         fileserver_runtime = None
     if P_STREAMING in processes_info and processes_info[P_STREAMING]["running"]:
         streaming_address = get_streaming_address(
-            get_ip_address(),
+            device_ip,
             config["maskcam"]["streaming-port"],
             config["maskcam"]["streaming-path"],
         )
@@ -215,6 +219,7 @@ def mqtt_send_device_status(mqtt_client):
             "inference_runtime": format_tdelta(inference_runtime),
             "fileserver_runtime": format_tdelta(fileserver_runtime),
             "streaming_address": streaming_address,
+            "device_ip": device_ip if is_valid_ip else None,
             "save_current_files": f"{keep_n}/{total_fsave}",
             "time": f"{t_now:%H:%M:%S}",
         },
@@ -227,7 +232,7 @@ def mqtt_send_file_list(mqtt_client):
     server_port = int(config["maskcam"]["fileserver-port"])
     try:
         file_list = sorted(os.listdir(config["maskcam"]["fileserver-hdd-dir"]))
-    except FileNotFoundError:
+    except FileNotFoundError:  # directory not created
         file_list = []
     return mqtt_send_msg(
         mqtt_client,

@@ -20,23 +20,17 @@
 # DEALINGS IN THE SOFTWARE.
 ################################################################################
 
-import socket
 from .config import config
 from gi.repository import GLib
 
-_cached_values = {}
+IP_UNKNOWN_LABEL = "<device-ip-not-configured>"
 
 
 def get_ip_address():
-    if "ip_address" not in _cached_values:
-        result_value = config["maskcam"]["device-ip"].strip()
-        if not result_value or result_value == "auto" or result_value == "0":
-            # This trick doesn't need internet connection
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                s.connect(("1.1.1.1", 80))
-                result_value = f"{s.getsockname()[0]}"
-        _cached_values["ip_address"] = result_value
-    return _cached_values["ip_address"]
+    result_value = config["maskcam"]["device-ip"].strip()
+    if not result_value or result_value == "0":
+        result_value = IP_UNKNOWN_LABEL
+    return result_value
 
 
 def get_streaming_address(host_address, rtsp_port, rtsp_path):
