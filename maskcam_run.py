@@ -24,7 +24,6 @@
 
 import os
 import sys
-import time
 import json
 import shutil
 import signal
@@ -50,6 +49,7 @@ from maskcam.common import (
 )
 from maskcam.utils import (
     get_ip_address,
+    IP_UNKNOWN_LABEL,
     load_udp_ports_filesaving,
     get_streaming_address,
     format_tdelta,
@@ -124,10 +124,11 @@ def terminate_process(name, process, e_interrupt_process, delete_info=False):
             warning=True,
         )
         process.terminate()
-    if delete_info:
-        del processes_info[name]  # Sequential processes, avoid filling memory
-    else:
-        processes_info[name].update({"ended": datetime.now(), "running": False})
+    if name in processes_info:
+        if delete_info:
+            del processes_info[name]  # Sequential processes, avoid filling memory
+        else:
+            processes_info[name].update({"ended": datetime.now(), "running": False})
     print(f"Process terminated: [yellow]{name}[/yellow]\n")
 
 
@@ -189,6 +190,8 @@ def mqtt_say_hello(mqtt_client):
 
 def mqtt_send_device_status(mqtt_client):
     t_now = datetime.now()
+    device_ip = get_ip_address()
+    is_valid_ip = device_ip != IP_UNKNOWN_LABEL
     if P_INFERENCE in processes_info and processes_info[P_INFERENCE]["running"]:
         inference_runtime = t_now - processes_info[P_INFERENCE]["started"]
     else:
@@ -199,7 +202,7 @@ def mqtt_send_device_status(mqtt_client):
         fileserver_runtime = None
     if P_STREAMING in processes_info and processes_info[P_STREAMING]["running"]:
         streaming_address = get_streaming_address(
-            get_ip_address(),
+            device_ip,
             config["maskcam"]["streaming-port"],
             config["maskcam"]["streaming-path"],
         )
@@ -215,6 +218,7 @@ def mqtt_send_device_status(mqtt_client):
             "inference_runtime": format_tdelta(inference_runtime),
             "fileserver_runtime": format_tdelta(fileserver_runtime),
             "streaming_address": streaming_address,
+            "device_ip": device_ip if is_valid_ip else None,
             "save_current_files": f"{keep_n}/{total_fsave}",
             "time": f"{t_now:%H:%M:%S}",
         },
@@ -227,7 +231,7 @@ def mqtt_send_file_list(mqtt_client):
     server_port = int(config["maskcam"]["fileserver-port"])
     try:
         file_list = sorted(os.listdir(config["maskcam"]["fileserver-hdd-dir"]))
-    except FileNotFoundError:
+    except FileNotFoundError:  # directory not created
         file_list = []
     return mqtt_send_msg(
         mqtt_client,
@@ -386,7 +390,7 @@ if __name__ == "__main__":
 
         Notes:
         \t - If no URI is provided, will use default-input defined in config_maskcam.txt
-        \t - If a file:///path/file.mp4 is provided, the output will be output_file.mp4 in the current dir
+        \t - If a file:///path/file.mp4 is provided, the output will be ./output_file.mp4
         \t - If the input is a live camera, the output will be consecutive
         \t   video files under /dev/shm/date_time.mp4
         \t   according to the time interval defined in output-chunks-duration in config_maskcam.txt.
@@ -447,6 +451,7 @@ if __name__ == "__main__":
         process_inference = None
         process_streaming = None
         process_fileserver = None
+        e_inference_ready = mp.Event()
 
         if fileserver_enabled:
             process_fileserver, e_interrupt_fileserver = start_process(
@@ -466,22 +471,24 @@ if __name__ == "__main__":
             input_filename=input_filename,
             output_filename=output_filename,
             stats_queue=stats_queue,
+            e_ready=e_inference_ready,
         )
 
         while not e_interrupt.is_set():
             # Send MQTT statistics, detect alarm events and request file-saving
             handle_statistics(mqtt_client, stats_queue, config, is_live_input)
 
-            # Handle sequential file saving processes
-            if fileserver_enabled and is_live_input:  # server can be enabled via MQTT
-                handle_file_saving(
-                    fileserver_period,
-                    fileserver_duration,
-                    fileserver_ram_dir,
-                    fileserver_hdd_dir,
-                    fileserver_force_save,
-                    mqtt_client=mqtt_client,
-                )
+            # Handle sequential file saving processes, only after inference process is ready
+            if e_inference_ready.is_set():
+                if fileserver_enabled and is_live_input:  # server can be enabled via MQTT
+                    handle_file_saving(
+                        fileserver_period,
+                        fileserver_duration,
+                        fileserver_ram_dir,
+                        fileserver_hdd_dir,
+                        fileserver_force_save,
+                        mqtt_client=mqtt_client,
+                    )
 
             if not q_commands.empty():
                 command = q_commands.get_nowait()
@@ -547,7 +554,7 @@ if __name__ == "__main__":
                     )
                     new_command(CMD_INFERENCE_RESTART)
 
-    except:
+    except:  # noqa
         console.print_exception()
 
     # Terminate all running processes, avoid breaking on any exception
@@ -559,20 +566,20 @@ if __name__ == "__main__":
                 fileserver_force_save,
                 mqtt_client=mqtt_client,
             )
-        except:
+        except:  # noqa
             console.print_exception()
     try:
         if process_inference is not None and process_inference.is_alive():
             terminate_process(P_INFERENCE, process_inference, e_interrupt_inference)
-    except:
+    except:  # noqa
         console.print_exception()
     try:
         if process_fileserver is not None and process_fileserver.is_alive():
             terminate_process(P_FILESERVER, process_fileserver, e_interrupt_fileserver)
-    except:
+    except:  # noqa
         console.print_exception()
     try:
         if process_streaming is not None and process_streaming.is_alive():
             terminate_process(P_STREAMING, process_streaming, e_interrupt_streaming)
-    except:
+    except:  # noqa
         console.print_exception()

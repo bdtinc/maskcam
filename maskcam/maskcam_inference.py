@@ -250,15 +250,20 @@ def draw_detection(display_meta, n_draw, box_points, detection_label, color):
     display_meta.num_labels = n_draw + 1
 
 
-def cb_buffer_probe(pad, info, u_data):
+def cb_buffer_probe(pad, info, cb_args):
     global frame_number
     global start_time
 
-    face_processor = u_data
+    face_processor, e_ready = cb_args
     gst_buffer = info.get_buffer()
     if not gst_buffer:
         print("Unable to get GstBuffer", error=True)
         return
+
+    # Set e_ready event to notify the pipeline is working (e.g: for orchestrator)
+    if e_ready is not None and not e_ready.is_set():
+        print("Inference pipeline setting [green]e_ready[/green]")
+        e_ready.set()
 
     # Retrieve batch metadata from the gst_buffer
     # Note that pyds.gst_buffer_get_nvds_batch_meta() expects the
@@ -513,6 +518,7 @@ def main(
     output_filename: str = None,
     e_external_interrupt: mp.Event = None,
     stats_queue: mp.Queue = None,
+    e_ready: mp.Event = None,
 ):
     global frame_number
     global start_time
@@ -784,7 +790,8 @@ def main(
     if not osdsinkpad:
         print("Unable to get sink pad of nvosd", error=True)
 
-    osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, cb_buffer_probe, face_processor)
+    cb_args = (face_processor, e_ready)
+    osdsinkpad.add_probe(Gst.PadProbeType.BUFFER, cb_buffer_probe, cb_args)
 
     # GLib loop required for RTSP server
     g_loop = GLib.MainLoop()
