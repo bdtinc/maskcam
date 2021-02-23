@@ -334,8 +334,10 @@ So issuing the following commands will run MaskCam:
 ```
 $ balena pull maskcam/maskcam-beta
 
-$balena run --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=10.0.0.245 -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+$ balena run --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=10.0.0.245 -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
+
+Note that building from source is significantly different on balenaOS than using docker under JetPack. If you wish to do this, you should familarize yourself with the details of balenaOS and also consider using balenaCloud (which has free accounts for under 10 devices).
 
 ## Running on Jetson Nano with Photon carrier board
 Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
