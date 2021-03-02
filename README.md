@@ -3,11 +3,11 @@ MaskCam is a reference design for a Jetson Nano-based smart camera system that m
 
 MaskCam can be run on a Jetson Nano Developer Kit, or on a Jetson Nano SOM with the ConnectTech Photon carrier board.  It was designed to use the Raspberry Pi High Quality Camera but will also work with pretty much any USB webcam.
 
-The on-device software stack is mostly written in Python and runs under JetPack 4.4.1 or 4.5. Edge AI processing is handled by Nvidia’s DeepStream video analytics framework and YoloV4 Tiny, and Tryolab's Norfair tracker.  MaskCam reports statistics to and receives commands from the cloud using MQTT and a web-based GUI. The software is containerized and for evaluation can be easily installed on a Jetson Nano DevKit using docker with just a couple of commands. For production, MaskCam can run under BalenaOS, which makes it easy to manage and deploy multiple devices.
+The on-device software stack is mostly written in Python and runs under JetPack 4.4.1 or 4.5. Edge AI processing is handled by NVIDIA’s DeepStream video analytics framework, YOLOv4-tiny, and Tryolab's Norfair tracker.  MaskCam reports statistics to and receives commands from the cloud using MQTT and a web-based GUI. The software is containerized and for evaluation can be easily installed on a Jetson Nano DevKit using docker with just a couple of commands. For production, MaskCam can run under BalenaOS, which makes it easy to manage and deploy multiple devices.
 
 We urge you to try it out! It’s easy to install on a Jetson Nano Dev Kit and requires only a web cam. (The cloud-based statistics server and web GUI are optional, but are also dockerized and easy to install on any reasonable Linux system.)  [See below for installation instructions.](https://github.com/tryolabs/bdti-jetson#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit)
 
-MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.A., with development funded by Nvidia. MaskCam is offered under the MIT License. For more information about MaskCam, please see the forthcoming white paper from BDTI.
+MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.A., with development funded by NVIDIA. MaskCam is offered under the MIT License. For more information about MaskCam, please see the forthcoming white paper from BDTI.
 
 ## Table of contents <!-- omit in toc -->
 - [Start Here!](#start-here)
@@ -28,6 +28,7 @@ MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.
   - [Development mode: manually running MaskCam](#development-mode-manually-running-maskcam)
   - [Debugging: running MaskCam modules as standalone processes](#debugging-running-maskcam-modules-as-standalone-processes)
 - [Building from Source on Jetson Nano Developer Kit](#building-from-source-on-jetson-nano-developer-kit)
+- [Running on Jetson Nano Developer Kit using balenaOS](#running-on-jetson-nano-developer-kit-using-balenaos)
 - [Running on Jetson Nano with Photon carrier board](#running-on-jetson-nano-with-photon-carrier-board)
 - [Useful development scripts](#useful-development-scripts)
 
@@ -37,30 +38,27 @@ MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.
 The easiest and fastest way to get MaskCam running on your Jetson Nano Dev Kit is using our pre-built containers.  You will need:
 
 1. A Jetson Nano Dev Kit running JetPack 4.4.1 or 4.5
-2. The external DC 4A power supply. This software makes full use of the GPU so it will not run with USB power.
-3. A USB webcam or RasPi HQ camera attached to your Nano
-4. Another computer with a program that can display RTSP streams -- we suggest VLC or QuickTime.
+2. An external DC 5V, 4A power supply connected through the Dev Kit's barrel jack connector (J25). (See [these instructions](https://www.jetsonhacks.com/2019/04/10/jetson-nano-use-more-power/) on how to enable barrel jack power.) This software makes full use of the GPU, so it will not run with USB power.
+3. A USB webcam attached to your Nano
+4. Another computer with a program that can display RTSP streams -- we suggest [VLC](https://www.videolan.org/vlc/index.html) or [QuickTime](https://www.apple.com/quicktime/download/).
 
-On your Nano, run:
+First, the MaskCam container needs to be downloaded from Docker Hub. On your Nano, run:
 ```
 # This will take 10 minutes or more to download
-docker pull maskcam/maskcam-beta
-```
-Optionally (recommended), find your Jetson IP address (e.g: using `ifconfig`).
-This will allow generating a valid streaming address that you can copy-paste later, and useful links in the web server.
-
-Now make sure to connect the camera and start!
-```
-# Connect power supply before running this!
-docker run --runtime nvidia --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=<optional-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+sudo docker pull maskcam/maskcam-beta
 ```
 
-The container should start running the `maskcam_run.py` script with the default input device (`/dev/video0`).
+Find your local Jetson Nano IP address using `ifconfig`. This address will be used later to view a live video stream from the camera and to interact with the Jetson from a web server.
 
-MaskCam will produce a whole bunch of status output (and error messages, if it encounters problems).
-If there are errors, the process will finish after a couple seconds (check [Troubleshooting](#troubleshooting)).
+Then, connect a USB camera to the Nano, and start MaskCam by running the following command. Make sure to substitute `<your-jetson-ip>` with your Nano's IP address.
+```
+# Connect USB camera before running this!
+sudo docker run --runtime nvidia --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+```
 
-Otherwise, leave it running (don't press `Ctrl+C`), and continue to the next section to visualize the video!
+The MaskCam container should start running the `maskcam_run.py` script using the USB camera as the default input device (`/dev/video0`). It will produce lots of status output messages (and error messages, if it encounters problems). If there are errors, the process will automatically end after a several seconds. Check the [Troubleshooting](#troubleshooting) section for tips on resolving errors.
+
+Otherwise, it should continually generate status messages (such as `Processed 100 frames...`). Leave it running (don't press `Ctrl+C`) and continue to the next section to visualize the video!
 
 ### Viewing the video streaming
 If you scroll through the logs and don't see any errors, you should find a message like:
@@ -69,31 +67,32 @@ If you scroll through the logs and don't see any errors, you should find a messa
 
 where `aaa.bbb.ccc.ddd` is the address that you provided in `MASKCAM_DEVICE_ADDRESS` previously (otherwise you'll see some unknown address label there).
 
-You can copy-paste that URL into your RSTP streaming viewer (e.g., VLC) on another computer, and if all goes well,
+You can copy-paste that URL into your RSTP streaming viewer (e.g., VLC) on another computer. The gif below shows how to initiate streaming with VLC. If all goes well,
 you should be rewarded with streaming video of your Nano, with green boxes around faces wearing masks and red boxes around faces not wearing masks.
 
-This mode just gives an idea of how MaskCam works. But it's not sending any statistics to the cloud, since we haven't enabled that yet.  If you want to play with that, you'll need to set up an MQTT server, which is covered in the [next sections](#setting-up-and-running-the-mqtt-broker-and-web-server).
+*Insert recorded gif of starting streaming on VLC*
+
+This mode just gives an idea of how MaskCam works. But it's not sending any statistics to the cloud, since we haven't enabled that yet.  If you want to play with that, you'll need to set up an MQTT server, which is covered in the [next sections](#mqtt-server-setup).
 
 ### Setting device configuration parameters
-The easiest way to configure parameters (without rebuilding the container or running manually and changing the config file each time), is through environment variables,
-like we did with `MASKCAM_DEVICE_ADDRESS`.
+MaskCam uses environment variables to configure parameters without having to rebuild the container or manually change the configuration file each time the program is run. For example, in the previous section we set the `MASKCAM_DEVICE_ADDRESS` variable to indicate our Nano's IP address. A list of configurable parameters is shown in [maskcam_config.txt](maskcam_config.txt). The mapping between environment variable names and configuration parameters is defined in [maskcam/config.py](maskcam/config.py).
 
-Options set using environment variables will **override** the default values specified in [maskcam_config.txt](maskcam_config.txt).
-The mapping between variable names and config file entries is defined in [maskcam/config.py](maskcam/config.py).
-
-For example, if you want to set an input device other than `/dev/video0`, you can define `MASKCAM_INPUT`.
+This section shows how to set environment variables to change configuration parameters. For example, if you want to use the `/dev/video1` camera device rather than `/dev/video0`, you can define `MASKCAM_INPUT` when running the container:
 
 ```
-docker run --runtime nvidia --privileged --rm -it --env MASKCAM_INPUT=v4l2:///dev/video1 --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+# Run with MASKCAM_INPUT and MASKCAM_DEVICE_ADDRESS
+sudo docker run --runtime nvidia --privileged --rm -it --env MASKCAM_INPUT=v4l2:///dev/video1 --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
-If you have an MQTT server already set-up (like shown in section [below](#setting-up-and-running-the-mqtt-broker-and-web-server)), you need to define
-two environment variables so that your device is able to find it and identify itself:
+As another example, if you have an already set up a MQTT server (as shown in [MQTT Server Setup section](#mqtt-server-setup)), you need to define
+two addtional environment variables, `MQTT_BROKER_IP` and `MQTT_DEVICE_NAME`. This allows your device to find the MQTT server and identify itself:
+
 ```
-docker run ... --env MQTT_BROKER_IP=<server IP> --env MQTT_DEVICE_NAME=<a-unique-string-you-like> --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip>...
+# Run with MQTT_BROKER_IP, MQTT_DEVICE_NAME, and MASKCAM_DEVICE_ADDRESS
+sudo docker run --runtime nvidia --privileged --rm -it --env MQTT_BROKER_IP=<server IP> --env MQTT_DEVICE_NAME=<a-unique-string-you-like> --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
-*If you have too many `--env` variables to add, it might be handy to use docker's `--env-file` instead.*
+*If you have too many `--env` variables to add, it might be easier to create a [.env file](https://docs.docker.com/compose/env-file/) and point to it using the `--env-file` flag instead.*
 
 ### Troubleshooting
 MaskCam actually consists of many different processes running in parallel. As a consequence, when there's an error on a particular process, all of them will be sent termination signals
