@@ -48,15 +48,15 @@ First, the MaskCam container needs to be downloaded from Docker Hub. On your Nan
 sudo docker pull maskcam/maskcam-beta
 ```
 
-Find your local Jetson Nano IP address using `ifconfig`. This address will be used later to view a live video stream from the camera and to interact with the Jetson from a web server.
+Find your local Jetson Nano IP address using `ifconfig`. This address will be used later to view a live video stream from the camera and to interact with the Nano from a web server.
 
-Then, connect a USB camera to the Nano, and start MaskCam by running the following command. Make sure to substitute `<your-jetson-ip>` with your Nano's IP address.
+Make sure a USB camera is connected to the Nano, and then start MaskCam by running the following command. Make sure to substitute `<your-jetson-ip>` with your Nano's IP address.
 ```
 # Connect USB camera before running this!
 sudo docker run --runtime nvidia --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
-The MaskCam container should start running the `maskcam_run.py` script using the USB camera as the default input device (`/dev/video0`). It will produce lots of status output messages (and error messages, if it encounters problems). If there are errors, the process will automatically end after a several seconds. Check the [Troubleshooting](#troubleshooting) section for tips on resolving errors.
+The MaskCam container should start running the `maskcam_run.py` script, using the USB camera as the default input device (`/dev/video0`). It will produce various status output messages (and error messages, if it encounters problems). If there are errors, the process will automatically end after several seconds. Check the [Troubleshooting](#troubleshooting) section for tips on resolving errors.
 
 Otherwise, it should continually generate status messages (such as `Processed 100 frames...`). Leave it running (don't press `Ctrl+C`) and continue to the next section to visualize the video!
 
