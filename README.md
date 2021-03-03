@@ -65,14 +65,14 @@ If you scroll through the logs and don't see any errors, you should find a messa
 
 ```Streaming at rtsp://aaa.bbb.ccc.ddd:8554/maskcam```
 
-where `aaa.bbb.ccc.ddd` is the address that you provided in `MASKCAM_DEVICE_ADDRESS` previously (otherwise you'll see some unknown address label there).
+where `aaa.bbb.ccc.ddd` is the address that you provided in `MASKCAM_DEVICE_ADDRESS` previously. (If you didn't provide an address, you'll see some unknown address label there.)
 
-You can copy-paste that URL into your RSTP streaming viewer (e.g., VLC) on another computer. The gif below shows how to initiate streaming with VLC. If all goes well,
+You can copy-paste that URL into your RSTP streaming viewer (such as VLC) on another computer. The gif below shows how to initiate streaming with VLC. If all goes well,
 you should be rewarded with streaming video of your Nano, with green boxes around faces wearing masks and red boxes around faces not wearing masks.
 
 *Insert recorded gif of starting streaming on VLC*
 
-This mode just gives an idea of how MaskCam works. But it's not sending any statistics to the cloud, since we haven't enabled that yet.  If you want to play with that, you'll need to set up an MQTT server, which is covered in the [next sections](#mqtt-server-setup).
+This video stream gives a general demonstration of how MaskCam works. However, MaskCam also has other features, such as the ability to send mask detection statistics to the cloud and view them through a web browser. If you'd like to see these features in action, you'll need to set up an MQTT server, which is covered in the [MQTT Server Setup section](#mqtt-server-setup).
 
 ### Setting device configuration parameters
 MaskCam uses environment variables to configure parameters without having to rebuild the container or manually change the configuration file each time the program is run. For example, in the previous section we set the `MASKCAM_DEVICE_ADDRESS` variable to indicate our Nano's IP address. A list of configurable parameters is shown in [maskcam_config.txt](maskcam_config.txt). The mapping between environment variable names and configuration parameters is defined in [maskcam/config.py](maskcam/config.py).
@@ -95,13 +95,10 @@ sudo docker run --runtime nvidia --privileged --rm -it --env MQTT_BROKER_IP=<ser
 *If you have too many `--env` variables to add, it might be easier to create a [.env file](https://docs.docker.com/compose/env-file/) and point to it using the `--env-file` flag instead.*
 
 ### Troubleshooting
-MaskCam actually consists of many different processes running in parallel. As a consequence, when there's an error on a particular process, all of them will be sent termination signals
-and finish gracefully. This means that you need to scroll up through the output to find out the original error that caused a failure. It should be very notorious, flagged as a red **ERROR** log entry, followed by the name of the process that failed and a message.
+MaskCam actually consists of many different processes running in parallel. As a consequence, when there's an error on a particular process, all of them will be sent termination signals and finish gracefully. This means that you need to scroll up through the output to find out the original error that caused a failure. It should be very notorious, flagged as a red **ERROR** log entry, followed by the name of the process that failed and a message.
 
 #### Error: camera not connected/not recognized
-You should see an error containing the message `Cannot identify device '/dev/video0'`, among other Gst and v4l information.
-
-Make sure the camera is connected and recognized by the host Ubuntu OS, where there should also be a device present `/dev/video0`.
+If you see an error containing the message `Cannot identify device '/dev/video0'`, among other Gst and v4l information, it means the program couldn't find the camera device. Make sure your camera is connected to the Nano and recognized by the host Ubuntu OS by issuing `ls /dev` and checking if `/dev/video0` is present in the output.
 
 #### Error: not running in privileged mode
 In this case, you'll see a bunch of annoying messages like:
@@ -110,42 +107,25 @@ Error: Can't initialize nvrm channel
 Couldn't create ddkvic Session: Cannot allocate memory
 nvbuf_utils: Could not create Default NvBufferSession
 ```
-Among other multiple failures on the MaskCam processes as well.
-
-Make sure you're running docker with the `--privileged` flag, as described in the previous sections.
+You'll probably see multiple failures in other MaskCam processes as well. To resolve these errors, make sure you're running docker with the `--privileged` flag, as described in the [first section](#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit).
 
 #### Error: reason not negotiated/camera capabilities
-If the error is like: v4l-camera-source / reason not-negotiated
-Then the problem is that the USB camera you're using doesn't support the default `camera-framerate=30` (frames per second).
+If you get an error that looks like: `v4l-camera-source / reason not-negotiated`
+Then the problem is that the USB camera you're using doesn't support the default `camera-framerate=30` (frames per second). If you don't have another camera, try running the script under utils/gst_capabilities.sh and find the lines with type `video/x-raw ...`
 
-If you don't have another camera, try running the script under utils/gst_capabilities.sh and find the lines with type
-`video/x-raw ...`
-
-Find any suitable `framerate=X/1` (with `X` being an integer like 24, 15, etc.)
-and set the corresponding configuration parameter with `--env MASKCAM_CAMERA_FRAMERATE=X` (see [previous section](#setting-device-configuration-parameters)).
+Find any suitable `framerate=X/1` (with `X` being an integer like 24, 15, etc.) and set the corresponding configuration parameter with `--env MASKCAM_CAMERA_FRAMERATE=X` (see [previous section](#setting-device-configuration-parameters)).
 
 #### Error: Streaming or file server are not accessible (nothing else seems to fail)
-Make sure you're mapping the right ports from the container, with the `-p container_port:host_port` parameters indicated in the previous sections.
-
-The default port numbers, that should be exposed by the container, are configured in [maskcam_config.txt](maskcam_config.txt) as:
+Make sure you're mapping the right ports from the container, with the `-p container_port:host_port` parameters indicated in the previous sections. The default port numbers, that should be exposed by the container, are configured in [maskcam_config.txt](maskcam_config.txt) as:
 ```
 fileserver-port=8080
 streaming-port=8554
 mqtt-broker-port=1883
 ```
-And that's why we're using `docker run ...  -p 1883:1883 -p 8080:8080 -p 8554:8554 ...` in the previous sections.
-
-Remember that all these ports can be overriden using environment variables, as described in the [previous section](#setting-device-configuration-parameters).
-
-Other ports like `udp-port-*` are not intended to be accessible from outside the container, they are used for communication between the inference process and the streaming and file-saving processes.
+These port mappings are why we use `docker run ...  -p 1883:1883 -p 8080:8080 -p 8554:8554 ...` with the run command. Remember that all the ports can be overriden using environment variables, as described in the [previous section](#setting-device-configuration-parameters). Other ports like `udp-port-*` are not intended to be accessible from outside the container, they are used for communication between the inference process and the streaming and file-saving processes.
 
 #### Other Errors
-Sometimes after restarting the process or the whole docker container many times, some GPU resources can get stuck and cause unexpected errors.
-
-If that's the case, try rebooting the device and running the container again.
-
-If you find that the container fails systematically after running some sequence, please don't hesitate
-to report an Issue with the relevant context and we'll try to reproduce and fix it.
+Sometimes after restarting the process or the whole docker container many times, some GPU resources can get stuck and cause unexpected errors. If that's the case, try rebooting the device and running the container again. If you find that the container fails systematically after running some sequence, please don't hesitate to report an Issue with the relevant context and we'll try to reproduce and fix it.
 
 ## MQTT Server Setup
 ### Running the MQTT Broker and Web Server
