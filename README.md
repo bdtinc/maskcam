@@ -129,20 +129,22 @@ Sometimes after restarting the process or the whole docker container many times,
 
 ## MQTT Server Setup
 ### Running the MQTT Broker and Web Server
-The MQTT broker and web server can be run on a Linux or OSX machine; we've tested it on Ubuntu 18.04LTS and OSX Big Sur.
+MaskCam is intended to be set up with a web server that stores mask detection statistics and allows users to remotely interact with the device. We've created a server [(maskcam/server)](maskcam/server) that receives statistics from the device, stores them in a database, and has a web-based GUI frontend to display them. A screenshot of the frontend for an example device is shown below.
 
-The server consists of a couple docker containers, that run together using [docker-compose](https://docs.docker.com/compose/install/) (follow installation instructions for your platform before continuing).
+*Insert frontend screenshot here*
 
-On the server, you only need to install docker-compose, everything else will be installed automatically and run in the containers.
-So, after installing it, clone this repo:
+You can test out and explore this functionality by building a server on another PC on your local network and pointing your Jetson Nano MaskCam device to it. This section gives instructions on how to do so. The MQTT broker and web server can be built and run on a Linux or OSX machine; we've tested it on Ubuntu 18.04LTS and OSX Big Sur.
+
+The server consists of a couple docker containers, that run together using [docker-compose](https://docs.docker.com/compose/install/). Install docker-compose on your machine by following the [installation instructions for your platform](https://docs.docker.com/compose/install/) before continuing. All other necessary packages and libraries will be automatically installed when you set up the containers in the next steps.
+
+After installing docker-compose, clone this repo:
 ```
-git clone <copy https or ssh url>.git
+git clone https://github.com/bdtinc/maskcam.git
 ```
 
-Go to the `server/` folder where you've a complete implementation of the server in four different containers:
-the mosquitto broker, backend API, database, and streamlit frontend.
+Go to the `server/` folder, which has a complete implementation of the server in four different containers: the Mosquitto broker, backend API, database, and Streamlit frontend.
 
-These containers are configured using environment variables, create the `.env` files using the default templates:
+These containers are configured using environment variables, create the `.env` files by copying the default templates:
 ```
 cd server
 cp database.env.template database.env
@@ -150,15 +152,14 @@ cp frontend.env.template frontend.env
 cp backend.env.template backend.env
 ```
 
-The only file that needs some edition from you, is `database.env`. Here are some example values, but you better be more creative for security reasons:
+The only file that needs to be changed is `database.env`. Open it with a text editor and replace the `<DATABASE_USER>`, `<DATABASE_PASSWORD>`, and `<DATABASE_NAME>` fields with your own values. Here are some example values, but you better be more creative for security reasons:
 ```
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=some_password
 POSTGRES_DB=maskcam
 ```
 
-*NOTE:* If you want to change any of the `database.env` values after building the containers, the easiest thing to do is to delete the `pgdata` volume, and you'll
-also delete all stored database information and statistics, if any (run `docker volume rm pgdata`).
+*NOTE:* If you want to change any of the `database.env` values after building the containers, the easiest thing to do is to delete the `pgdata` volume by running `docker volume rm pgdata`. It will also delete all stored database information and statistics.
 
 After editing the database environment file, you're ready to build all the containers and run them in a single command:
 
@@ -166,14 +167,15 @@ After editing the database environment file, you're ready to build all the conta
 docker-compose up -d
 ```
 
-Wait a couple minutes so that all containers are built and running, and then you can open a browser and visit the frontend:
+Wait a couple minutes after issuing the command to make sure that all containers are built and running. Then, check the IP of the new docker server by issuing `ifconfig` and finding the IP of the `docker0` interface. (Typically, it looks something like `172.17.0.1`.)
+
+Next, open a web browser and enter the server IP to visit the frontend webpage:
 ```
 http://<server IP>:8501/
 ```
-If you see a `ConnectionError` in the frontend, wait a couple more minutes and reload the page, the backend
-container can take some time to finish the database setup.
+If you see a `ConnectionError` in the frontend, wait a couple more minutes and reload the page. The backend container can take some time to finish the database setup.
 
-*NOTE:* If you're setting up a remote instance like an AWS EC2, make sure you have ports `1883` and `8501` open for inbound and outbound traffic.
+*NOTE:* If you're setting the server up on a remote instance like an AWS EC2, make sure you have ports `1883` and `8501` open for inbound and outbound traffic.
 
 
 ### Setup a device with your server
