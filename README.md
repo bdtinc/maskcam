@@ -132,7 +132,7 @@ Sometimes after restarting the process or the whole docker container many times,
 MaskCam is intended to be set up with a web server that stores mask detection statistics and allows users to remotely interact with the device. We've created a server [(maskcam/server)](maskcam/server) that receives statistics from the device, stores them in a database, and has a web-based GUI frontend to display them. A screenshot of the frontend for an example device is shown below.
 
 <p align="center">
-  <img src="/docs/imgs/maskcam-frontend.PNG" width="610" height="410">
+  <img src="/docs/imgs/maskcam-frontend1.png">
 </p>
 
 You can test out and explore this functionality by building a server on another PC on your local network and pointing your Jetson Nano MaskCam device to it. This section gives instructions on how to do so. The MQTT broker and web server can be built and run on a Linux or OSX machine; we've tested it on Ubuntu 18.04LTS and OSX Big Sur.
