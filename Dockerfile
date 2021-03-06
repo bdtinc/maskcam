@@ -108,7 +108,12 @@ ENV CUDA_VER=10.2
 RUN cd /deepstream_plugin_yolov4 && make
 
 # Get TensorRT engine (pretrained YOLOv4-tiny)
-RUN wget -P / https://maskcam.s3.us-east-2.amazonaws.com/facemask_y4tiny_1024_608_fp16.trt
+# Model trained on smaller dataset
+# RUN wget -P / https://maskcam.s3.us-east-2.amazonaws.com/facemask_y4tiny_1024_608_fp16.trt
+
+# Model trained on bigger dataset, merged with MAFA, WiderFace, Kaggle Medical Masks and FDDB
+RUN wget -P / https://maskcam.s3.us-east-2.amazonaws.com/maskcam_y4t_1024_608_fp16.trt
+# RUN wget -P / https://maskcam.s3.us-east-2.amazonaws.com/maskcam_y4t_1120_640_fp16.trt
 
 # Install requirements with pinned versions
 COPY requirements.txt /maskcam_requirements.txt
