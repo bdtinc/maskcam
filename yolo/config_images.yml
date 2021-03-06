@@ -1,5 +1,5 @@
 yolo_generic:
-  detection_threshold: 0.5
+  detection_threshold: 0.1
   nms_threshold: 0.1  # Lower values filter more
   distance_threshold: 1
 
@@ -7,12 +7,14 @@ yolo_trt_tiny:
   names_file: data/obj.names
   # engine_file: ../yolo/yolov4-facemask-tiny-fp16.trt
   # engine_file: ../../tensorrt_batch8_fp16.trt
-  engine_file: facemask_y4tiny_1024_608_fp16.trt
+  # engine_file: facemask_y4tiny_1024_608_fp16.trt
+  # engine_file: maskcam_y4t_1120_640_fp16.trt
+  engine_file: maskcam_y4t_1024_608_fp16.trt
   use_cuda: true
   input_width: 1024
   input_height: 608
   batch_size: 1
-  min_detection_size: 16  # Also see: face_min_size in face_mask_detector
+  min_detection_size: 8  # Also see: face_min_size in face_mask_detector
 
 debug:
   output_detector_resolution: true
