@@ -57,10 +57,10 @@ from .utils import glib_cb_restart, load_udp_ports_filesaving
 
 
 # YOLO labels. See obj.names file
-PGIE_CLASS_ID_MASK = 0
-PGIE_CLASS_ID_NO_MASK = 1
-PGIE_CLASS_ID_NOT_VISIBLE = 2
-PGIE_CLASS_ID_MISPLACED = 3
+LABEL_MASK = "mask"
+LABEL_NO_MASK = "no_mask"  # YOLOv4: no_mask
+LABEL_MISPLACED = "misplaced"
+LABEL_NOT_VISIBLE = "not_visible"
 FRAMES_LOG_INTERVAL = int(config["maskcam"]["inference-log-interval"])
 
 # Global vars
@@ -138,9 +138,9 @@ class FaceMaskProcessor:
             if person_id not in self.people_votes:
                 self.people_votes[person_id] = 0
             if score > self.th_vote:
-                if label == "mask":
+                if label == LABEL_MASK:
                     self.people_votes[person_id] += 1
-                elif label == "no_mask" or "misplaced":
+                elif label == LABEL_NO_MASK or LABEL_MISPLACED:
                     self.people_votes[person_id] -= 1
                 # max_votes limit
                 self.people_votes[person_id] = np.clip(
@@ -368,9 +368,9 @@ def cb_buffer_probe(pad, info, cb_args):
                 points = detection.points
                 box_points = points.clip(0).astype(int)
                 label = detection.data["label"]
-                if label == "mask":
+                if label == LABEL_MASK:
                     color = face_processor.color_mask
-                elif label == "no_mask" or label == "misplaced":
+                elif label == LABEL_NO_MASK or label == LABEL_MISPLACED:
                     color = face_processor.color_no_mask
                 else:
                     color = face_processor.color_unknown

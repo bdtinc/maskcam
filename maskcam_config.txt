@@ -93,13 +93,26 @@ net-scale-factor=0.0039215697906911373
 #0=RGB, 1=BGR
 model-color-format=0
 
-model-engine-file=yolo/facemask_y4tiny_1024_608_fp16.trt
+# YOLOv4
+# model-engine-file=yolo/facemask_y4tiny_1024_608_fp16.trt
+# model-engine-file=yolo/maskcam_y4t_1184_672_fp16.trt
+# model-engine-file=yolo/maskcam_y4t_1120_640_fp16.trt
+model-engine-file=yolo/maskcam_y4t_1024_608_fp16.trt
 labelfile-path=yolo/data/obj.names
 custom-lib-path=deepstream_plugin_yolov4/libnvdsinfer_custom_impl_Yolo.so
 
+# Detectnet_v2
+# tlt-encoded-model=detectnet_v2/resnet18_detector.etlt
+# tlt-model-key=tlt_encode
+# labelfile-path=detectnet_v2/labels.txt
+# input-dims=3;544;960;0 # where c = number of channels, h = height of the model input, w = width of model input, 0: implies CHW format.
+# uff-input-blob-name=input_1
+# output-blob-names=output_cov/Sigmoid;output_bbox/BiasAdd
+
+num-detected-classes=4
+
 ## 0=FP32, 1=INT8, 2=FP16 mode
 network-mode=2
-num-detected-classes=4
 gie-unique-id=1
 network-type=0
 # is-classifier=0
