@@ -23,6 +23,8 @@ ENV_CONFIG_OVERRIDES = (
     ("MASKCAM_TIMEOUT_INFERENCE_RESTART", ("maskcam", "timeout-inference-restart")),
     ("MASKCAM_CAMERA_FRAMERATE", ("maskcam", "camera-framerate")),
     ("MASKCAM_CAMERA_FLIP_METHOD", ("maskcam", "camera-flip-method")),
+    ("MASKCAM_OUTPUT_VIDEO_WIDTH", ("maskcam", "output-video-width")),
+    ("MASKCAM_OUTPUT_VIDEO_HEIGHT", ("maskcam", "output-video-height")),
     ("MASKCAM_INFERENCE_INTERVAL_AUTO", ("maskcam", "inference-interval-auto")),
     ("MASKCAM_INFERENCE_MAX_FPS", ("maskcam", "inference-max-fps")),
     ("MASKCAM_INFERENCE_LOG_INTERVAL", ("maskcam", "inference-log-interval")),

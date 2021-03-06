@@ -45,7 +45,11 @@ inference-log-interval=300
 #    -> file:///absolute/path/to/file.mp4
 default-input=v4l2:///dev/video0
 
-# Run utils/gst_capabilities.sh and find some combination with framerate <= 14 fps
+# Output/streaming video resolution. 1024x576 keeps 4k aspect ratio of 1.777
+output-video-width=1024
+output-video-height=576
+
+# Run utils/gst_capabilities.sh and find video/x-raw entries
 camera-framerate=30
 
 # Only used for argus:// inputs
@@ -56,7 +60,8 @@ camera-flip-method=0
 # E.g: if framerate=30 and max-fps=14,
 #      -> will set interval=2 so that inference runs only 1/3 of incoming frames
 inference-interval-auto=1
-# Only needed if inference-interval-auto. Adjust value (14fps is for Jetson Nano 4GB)
+# Set this value to the actual FPS bottleneck of the model. Only used if inference-interval-auto.
+# e.g: run the model on a video file (instead of live camera source) to determine model's FPS on your device
 inference-max-fps=14
 
 udp-port-streaming=5400
