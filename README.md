@@ -24,11 +24,15 @@ MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.
   - [Running the MQTT Broker and Web Server](#running-the-mqtt-broker-and-web-server)
   - [Setup a device with your server](#setup-a-device-with-your-server)
   - [Checking MQTT connection](#checking-mqtt-connection)
+- [Running on Jetson Nano Developer Kit using balenaOS](#running-on-jetson-nano-developer-kit-using-balenaos)
+  - [Installing balenaOS](#installing-balenaos)
+  - [Installing balena CLI](#installing-balena-cli)
+  - [Connecting to your Jetson](#connecting-to-your-jetson)
+  - [Using balenaCloud](#using-balenacloud)
 - [Accessing the MaskCam container](#accessing-the-maskcam-container)
   - [Development mode: manually running MaskCam](#development-mode-manually-running-maskcam)
   - [Debugging: running MaskCam modules as standalone processes](#debugging-running-maskcam-modules-as-standalone-processes)
 - [Building from Source on Jetson Nano Developer Kit](#building-from-source-on-jetson-nano-developer-kit)
-- [Running on Jetson Nano Developer Kit using balenaOS](#running-on-jetson-nano-developer-kit-using-balenaos)
 - [Running on Jetson Nano with Photon carrier board](#running-on-jetson-nano-with-photon-carrier-board)
 - [Useful development scripts](#useful-development-scripts)
 
@@ -211,6 +215,65 @@ nc -vz <server IP> 1883
 ```
 Remember you also need to open port `8501` to access the web server frontend from a web browser, as explained in the [server configuration section](#running-the-mqtt-broker-and-web-server) (but that's not relevant for the MQTT communication with the device).
 
+
+## Running on Jetson Nano Developer Kit using balenaOS
+
+balenaOS is a very light weight distribution designed for running containers on edge devices which when combined with Balena's balenaCloud mangament system has a number of advantages for fleet deployment and management. Explaining the details of how to set up balenaCloud applications is beyond the scope of this document, but you can test MaskCam on balenaOS using a local development environment setup.
+Except for installing balenaOS and using a slightly modified launch command, this process is essentially the same as the Jetson Nano Development kit instructions above.
+
+If you want to use balenaCloud instead (i.e: see your device in the web dashboard), and you're willing to take some time to push the container to your own account, check [Using balenaCloud](#using-balenacloud) at the end of this section.
+
+In any case, this will require a Jetson Nano Development Kit, a 32 gb or higher micro-sd card, and another computer (referred to here as main system) on the same network.
+
+### Installing balenaOS
+As mentioned, this procedure will not link your device with a balenaCloud account, but instead it will enable local development.
+
+First, go to https://www.balena.io/os/?, scroll down and download the development version for Nvidia Jetson Nano SD-CARD.
+
+Next, go to https://www.balena.io/etcher/ and install balenaEtcher.
+
+In balenaEtcher, simply select the zip file you downloaded, and after inserting the sd card into your main system select it, then press the 'Flash!' icon.
+
+After the flashing process is completed, place the sd card into your Jetson Nano Development Kit, ensure the network cable is plugged into the device and power up the Jetson.
+
+### Installing balena CLI
+
+Use the instructions here https://github.com/balena-io/balena-cli/blob/master/INSTALL.md to install the balena CLI tool.
+
+### Connecting to your Jetson
+
+First, in a terminal on your main system run the command:
+```
+sudo balena scan
+```
+Note the ip address in the result.
+
+Next connect to your Jetson:
+```
+balena ssh balena.local
+```
+
+At this point you are in a console as root user on your Jetson running balenaOS. The commands from this point on are exactly the same as the instructions for running using JetPack on the Nano Developer Kit with the following differences.
+1. The `docker` command is replaced by `balena`
+2. Do not use the `--runtime nvidia` switch. It is automatic on balenaOS for Jetson and you will get errors if you include it.
+
+So issuing the following commands will run MaskCam:
+```
+$ balena pull maskcam/maskcam-beta
+
+$ balena run --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=10.0.0.245 -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+```
+
+Note that building from source is significantly different on balenaOS than using docker under JetPack. If you wish to do this, you should familarize yourself with the details of balenaOS and also consider using balenaCloud (which has free accounts for under 10 devices).
+
+### Using balenaCloud
+You can create a free balenaCloud account that will allow you to link up to 10 devices, in order to test some of the most useful features that this platform provides.
+You'll need to create an App, install the balena CLI and then follow these instructions in order to deploy the maskcam container to your app:
+
+https://www.balena.io/docs/learn/deploy/deployment/
+
+For a simple use case, you can just use the `balena push myApp` command from the root directory of this project (it will take a long time while it builds and pushes the whole image), but you should familiarize yourself with the platform and use the deployment method that better fits your needs.
+
 ## Accessing the MaskCam container
 ### Development mode: manually running MaskCam
 If you want to play around with the code, you probably don't want the container to automatically start running the `maskcam_run.py` script.
@@ -278,49 +341,6 @@ docker run --runtime nvidia --privileged --rm -it -p 1883:1883 -p 8080:8080 -p 8
 
 If you still want to better understand some of the [Dockerfile](Dockerfile) steps, or you need to run without a container and are willing to deal with version conflicts, please see the dependencies manual installation and building instructions at [docs/Manual-Dependency-Installation.md](docs/Manual-Dependencies-Installation.md)
 
-## Running on Jetson Nano Developer Kit using balenaOS
-
-balenaOS is a very light weight distribution designed for running containers on edge devices which when combined with Balena's balenaCloud mangament system has a number of advantages for fleet deployment and management. Explaining the details of how to set up balenaCloud applications is beyond the scope of this document, but you can test MaskCam on balenaOS using a local development environment setup. Except for installing balenaOS and using a slightly modified launch command, this process is essentially the same as the Jetson Nano Development kit instructions above.
-This will require a Jetson Nano Development Kit, a 32 gb or higher micro-sd card, and another computer (referred to here as main system) on the same network.
-
-### Installing balenaOS
-First, go to https://www.balena.io/os/?, scroll down and download the development version for Nvidia Jetson Nano SD-CARD.
-
-Next, go to https://www.balena.io/etcher/ and install balenaEtcher.
-
-In balenaEtcher, simply select the zip file you downloaded, and after inserting the sd card into your main system select it, then press the 'Flash!' icon.
-
-After the flashing process is completed, place the sd card into your Jetson Nano Development Kit, ensure the network cable is plugged into the device and power up the Jetson.
-
-### Installing balena CLI
-
-Use the instructions here https://github.com/balena-io/balena-cli/blob/master/INSTALL.md to install the balena CLI tool.
-
-### Connecting to your Jetson
-
-First, in a terminal on your main system run the command:
-```
-sudo balena scan
-```
-Note the ip address in the result.
-
-Next connect to your Jetson:
-```
-balena ssh balena.local
-```
-
-At this point you are in a console as root user on your Jetson running balenaOS. The commands from this point on are exactly the same as the instructions for running using JetPack on the Nano Developer Kit with the following differences.
-1. The `docker` command is replaced by `balena`
-2. Do not use the `--runtime nvidia` switch. It is automatic on balenaOS for Jetson and you will get errors if you include it.
-
-So issuing the following commands will run MaskCam:
-```
-$ balena pull maskcam/maskcam-beta
-
-$ balena run --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=10.0.0.245 -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
-```
-
-Note that building from source is significantly different on balenaOS than using docker under JetPack. If you wish to do this, you should familarize yourself with the details of balenaOS and also consider using balenaCloud (which has free accounts for under 10 devices).
 
 ## Running on Jetson Nano with Photon carrier board
 Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
