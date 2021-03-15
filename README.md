@@ -3,7 +3,7 @@ MaskCam is a reference design for a Jetson Nano-based smart camera system that m
 
 MaskCam can be run on a Jetson Nano Developer Kit, or on a Jetson Nano SOM with the ConnectTech Photon carrier board.  It was designed to use the Raspberry Pi High Quality Camera but will also work with pretty much any USB webcam.
 
-The on-device software stack is mostly written in Python and runs under JetPack 4.4.1 or 4.5. Edge AI processing is handled by NVIDIA’s DeepStream video analytics framework, YOLOv4-tiny, and Tryolab's Norfair tracker.  MaskCam reports statistics to and receives commands from the cloud using MQTT and a web-based GUI. The software is containerized and for evaluation can be easily installed on a Jetson Nano DevKit using docker with just a couple of commands. For production, MaskCam can run under BalenaOS, which makes it easy to manage and deploy multiple devices.
+The on-device software stack is mostly written in Python and runs under JetPack 4.4.1 or 4.5. Edge AI processing is handled by NVIDIA’s DeepStream video analytics framework, YOLOv4-tiny, and Tryolab's [Norfair](https://github.com/tryolabs/norfair) tracker.  MaskCam reports statistics to and receives commands from the cloud using MQTT and a web-based GUI. The software is containerized and for evaluation can be easily installed on a Jetson Nano DevKit using docker with just a couple of commands. For production, MaskCam can run under BalenaOS, which makes it easy to manage and deploy multiple devices.
 
 We urge you to try it out! It’s easy to install on a Jetson Nano Dev Kit and requires only a web cam. (The cloud-based statistics server and web GUI are optional, but are also dockerized and easy to install on any reasonable Linux system.)  [See below for installation instructions.](https://github.com/tryolabs/bdti-jetson#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit)
 
@@ -33,6 +33,9 @@ MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.
   - [Development mode: manually running MaskCam](#development-mode-manually-running-maskcam)
   - [Debugging: running MaskCam modules as standalone processes](#debugging-running-maskcam-modules-as-standalone-processes)
 - [Building from Source on Jetson Nano Developer Kit](#building-from-source-on-jetson-nano-developer-kit)
+- [Adapt your own detection model](#adapt-your-own-detection-model)
+  - [Changing the DeepStream model](#changing-the-deepstream-model)
+  - [Changing the object labels](#changing-the-object-labels)
 - [Running on Jetson Nano with Photon carrier board](#running-on-jetson-nano-with-photon-carrier-board)
 - [Useful development scripts](#useful-development-scripts)
 
@@ -341,6 +344,26 @@ docker run --runtime nvidia --privileged --rm -it -p 1883:1883 -p 8080:8080 -p 8
 
 If you still want to better understand some of the [Dockerfile](Dockerfile) steps, or you need to run without a container and are willing to deal with version conflicts, please see the dependencies manual installation and building instructions at [docs/Manual-Dependency-Installation.md](docs/Manual-Dependencies-Installation.md)
 
+## Adapt your own Detection Model
+As mentioned above, MaskCam is a reference design for smart camera applications that need to perform computer vision tasks on the edge. Specifically, those involving **Object Detection** (for which you'll need a TensorRT engine) and **Tracking** (for which we use [Norfair](https://github.com/tryolabs/norfair)).
+
+Depending on the degree of similarity with this particular use case, you might need to just change the configuration file or some parts of the source code.
+
+### Changing the DeepStream model
+If you train a new model that is compatible with DeepStream, and has exactly the same (or a subset of the) object classes that are used in this project (`mask`, `no_mask`, `not_visible`, `misplaced`), then you only need to edit the configuration file.
+
+In particular, you should change only the corresponding parts of the [maskcam_config.txt](maskcam_config.txt) file, which are under the `[property]` section, and make them match your app's configuration parameters (usually under a file `config_infer_primary.txt` in NVIDIA sample apps). You should not need to change any of the `[face-processor]`, `[mqtt]` or `[maskcam]` sections of the config file, in order to use a new compatible model. Also, note that the `interval` parameter of that section will be ignored when `inference-interval-auto` is enabled.
+
+As an example, you'll find there's commented code showing how to use a `Detectnet_v2` model like the one trained using the [NVIDIA facemask app](https://github.com/NVIDIA-AI-IOT/face-mask-detection), but after converting the label names as mentioned above.
+
+Check the [DeepStream docs](https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_using_custom_model.html) for more information about how to convert a model in order to use it with DeepStream (in particular, the `nvinfer` GStreamer plugin).
+
+Remember to include your new model engine file in the [Dockerfile](Dockerfile) before building the container!
+
+### Changing the object labels
+If your custom model does not have exactly the same label names, you should edit the [maskcam_inference.py](maskcam/maskcam_inference.py) file, and change the constants `LABEL_MASK`, `LABEL_NO_MASK`, `LABEL_MISPLACED` and `LABEL_NOT_VISIBLE`, to match your needs.
+
+If your application has nothing to do with detecting face masks, then you'll probably need to change many other parts of the source code for this application, but a good place to start is the `FaceMaskProcessor` class definition, used in the same inference file, which contains all the code related to the DeepStream pipeline.
 
 ## Running on Jetson Nano with Photon carrier board
 Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
