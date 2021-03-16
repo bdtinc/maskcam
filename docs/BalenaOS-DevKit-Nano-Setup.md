@@ -1,23 +1,57 @@
 # BalenaOS Developer Kit Nano Setup Instructions for MaskCam
-This page provides step-by-step instructions for setting up the Jetson Nano Developer Kit with balenaOS, rather than NVIDIA's JetPack OS. BalenaOS is a barebones host operating system optimized for running Docker containers. It allows MaskCam to easily be installed as a container and remotely updated or configured.
 
+BalenaOS is a very light weight distribution designed for running containers on edge devices. It has a number of advantages for fleet deployment and management, especially when combined with balena's balenaCloud mangament system. Explaining the details of how to set up balenaCloud applications is beyond the scope of this document, but you can test MaskCam on balenaOS using a local development environment setup.
+Except for installing balenaOS and using a slightly modified launch command, this process is essentially the same as the Jetson Nano Development kit instructions from [the main README](https://github.com/bdtinc/maskcam#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit).
 
-## Setup Instructions
+If you want to use balenaCloud instead (i.e: see your device in the web dashboard), and you're willing to take some time to push the container to your own account, check [Using balenaCloud](#using-balenacloud) at the end of this section.
 
-### 1. Create balena account
-Evan or John can work on this part
+In any case, this will require a Jetson Nano Development Kit, a 32 GB or higher Micro-SD card, and another computer (referred to here as main system) on the same network.
 
+### Installing balenaOS
+As mentioned, this procedure will not link your device with a balenaCloud account, but instead it will enable local development.
 
-### 2. Create new application and device on balena dashboard
-Evan or John can work on this part. This part includes using balena dashboard to create a new application and device, and then flashing the device image onto an SD card and installing it in the Jetson Nano Developer Kit.
+First, go to https://www.balena.io/os/, scroll to the Download section, and download the development version for Nvidia Jetson Nano SD-CARD.
 
+Next, go to https://www.balena.io/etcher/ and install balenaEtcher.
 
-### 3. Deploy MaskCam code to balena device
-(John can work on this part... Evan doesn't know how it works yet :grimacing: )
+In balenaEtcher, simply select the zip file you downloaded, and after inserting the sd card into your main system select it, then press the 'Flash!' icon.
 
+After the flashing process is completed, place the sd card into your Jetson Nano Development Kit, ensure the network cable is plugged into the device and power up the Jetson.
 
-### 4. Running MaskCam on device
-Evan or John can work on this part.
-Still need to test out Braulio's new code that automatically starts MaskCam on powerup to see how it works.
+### Installing balena CLI
 
-### What else?
+Use the instructions here https://github.com/balena-io/balena-cli/blob/master/INSTALL.md to install the balena CLI tool.
+
+### Connecting to your Jetson
+
+First, in a terminal on your main system run the command:
+```
+sudo balena scan
+```
+Note the ip address in the result.
+
+Next connect to your Jetson:
+```
+balena ssh balena.local
+```
+
+At this point you are in a console as root user on your Jetson running balenaOS. The commands from this point on are exactly the same as the instructions for running using JetPack on the Nano Developer Kit with the following differences.
+1. The `docker` command is replaced by `balena`
+2. Do not use the `--runtime nvidia` switch. It is automatic on balenaOS for Jetson and you will get errors if you include it.
+
+So issuing the following commands will run MaskCam:
+```
+$ balena pull maskcam/maskcam-beta
+
+$ balena run --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=10.0.0.245 -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+```
+
+Note that building from source is significantly different on balenaOS than using docker under JetPack. If you wish to do this, you should familarize yourself with the details of balenaOS and also consider using balenaCloud (which has free accounts for under 10 devices).
+
+### Using balenaCloud
+You can create a free balenaCloud account that will allow you to link up to 10 devices, in order to test some of the most useful features that this platform provides.
+You'll need to create an App, install the balena CLI and then follow these instructions in order to deploy the maskcam container to your app:
+
+https://www.balena.io/docs/learn/deploy/deployment/
+
+For a simple use case, you can just use the `balena push myApp` command from the root directory of this project (it will take a long time while it builds and pushes the whole image), but you should familiarize yourself with the platform and use the deployment method that better fits your needs.
