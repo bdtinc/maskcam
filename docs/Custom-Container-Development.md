@@ -1,4 +1,4 @@
-# Custom MaskCam Container Development
+# Custom Container Development
 The MaskCam code in this repository can be used as a starting point for developing your own smart camera application. If you'd like to develop a custom application (for example, a dog detector that counts how many dogs walk past your house and reports the count to a server), you can build your own container that has the custom code, files, and packages used for your unique application. This page gives instructions on how to build a custom container, rather than downloading our pre-built container from Docker. 
 
 This page is split in to two sections:
