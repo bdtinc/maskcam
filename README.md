@@ -140,7 +140,7 @@ MaskCam is intended to be set up with a web server that stores mask detection st
   <img src="/docs/imgs/maskcam-frontend.PNG">
 </p>
 
-You can test out and explore this functionality by starting the server on a PC on your local network and pointing your Jetson Nano MaskCam device to it. This section gives instructions on how to do so. The MQTT broker and web server can be built and run on a Linux or OSX machine; we've tested it on Ubuntu 18.04LTS and OSX Big Sur.
+You can test out and explore this functionality by starting the server on a PC on your local network and pointing your Jetson Nano MaskCam device to it. This section gives instructions on how to do so. The MQTT broker and web server can be built and run on a Linux or OSX machine; we've tested it on Ubuntu 18.04LTS and OSX Big Sur. It can also be set up in an online AWS EC2 instance if you want to access it from outside of your local network.
 
 The server consists of a couple docker containers, that run together using [docker-compose](https://docs.docker.com/compose/install/). Install docker-compose on your machine by following the [installation instructions for your platform](https://docs.docker.com/compose/install/) before continuing. All other necessary packages and libraries will be automatically installed when you set up the containers in the next steps.
 
@@ -186,11 +186,7 @@ If you see a `ConnectionError` in the frontend, wait a couple more seconds and r
 
 
 ### Setup a Device With Your Server
-
-After configuring the server (locally or in an AWS EC2 instance with public IP),
-and making sure that port `1883` of your server is accessible for inbound and
-outbound traffic, and from your Jetson Device (see [next section](#checking-mqtt-connection) in case of trouble),
-you just need to set the server IP and a name on your device:
+Once you've got the server set up on a local machine (or in a AWS EC2 instance with a public IP), switch back to the Jetson Nano device. Run the MaskCam container using the following command, where `MQTT_BROKER_IP` is set to the IP of your server. (If you're using an AWS EC2 server, make sure to configure port `1883` for inbound and outbound traffic before running this command.)
 
 ```
 # Run with MQTT_BROKER_IP, MQTT_DEVICE_NAME, and MASKCAM_DEVICE_ADDRESS
