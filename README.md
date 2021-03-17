@@ -14,30 +14,21 @@ MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.
   - [Running MaskCam from a Container on a Jetson Nano Developer Kit](#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit)
   - [Viewing the video streaming](#viewing-the-video-streaming)
   - [Setting device configuration parameters](#setting-device-configuration-parameters)
-  - [Troubleshooting](#troubleshooting)
-    - [Error: camera not connected/not recognized](#error-camera-not-connectednot-recognized)
-    - [Error: not running in privileged mode](#error-not-running-in-privileged-mode)
-    - [Error: reason not negotiated/camera capabilities](#error-reason-not-negotiatedcamera-capabilities)
-    - [Error: Streaming or file server are not accessible (nothing else seems to fail)](#error-streaming-or-file-server-are-not-accessible-nothing-else-seems-to-fail)
-    - [Other Errors](#other-errors)
+  - [Troubleshooting common errors](#troubleshooting)
 - [MQTT Server Setup](#mqtt-server-setup)
   - [Running the MQTT Broker and Web Server](#running-the-mqtt-broker-and-web-server)
   - [Setup a device with your server](#setup-a-device-with-your-server)
   - [Checking MQTT connection](#checking-mqtt-connection)
-- [Running on Jetson Nano Developer Kit using balenaOS](#running-on-jetson-nano-developer-kit-using-balenaos)
-  - [Installing balenaOS](#installing-balenaos)
-  - [Installing balena CLI](#installing-balena-cli)
-  - [Connecting to your Jetson](#connecting-to-your-jetson)
-  - [Using balenaCloud](#using-balenacloud)
 - [Accessing the MaskCam container](#accessing-the-maskcam-container)
   - [Development mode: manually running MaskCam](#development-mode-manually-running-maskcam)
   - [Debugging: running MaskCam modules as standalone processes](#debugging-running-maskcam-modules-as-standalone-processes)
-- [Building from Source on Jetson Nano Developer Kit](#building-from-source-on-jetson-nano-developer-kit)
-- [Adapt your own detection model](#adapt-your-own-detection-model)
-  - [Changing the DeepStream model](#changing-the-deepstream-model)
-  - [Changing the object labels](#changing-the-object-labels)
-- [Running on Jetson Nano with Photon carrier board](#running-on-jetson-nano-with-photon-carrier-board)
-- [Useful development scripts](#useful-development-scripts)
+- Additional information and next steps (add link)
+  - [Running on Jetson Nano Developer Kit using balenaOS](#running-on-jetson-nano-developer-kit-using-balenaos)
+  - Custom container development (add link)
+  - [Building from Source on Jetson Nano Developer Kit](#building-from-source-on-jetson-nano-developer-kit)
+  - [Adapt your own detection model](#adapt-your-own-detection-model)
+  - [Running on Jetson Nano with Photon carrier board](#running-on-jetson-nano-with-photon-carrier-board)
+  - [Useful development scripts](#useful-development-scripts)
 
 
 ## Start Here!
@@ -218,59 +209,7 @@ nc -vz <server IP> 1883
 Remember you also need to open port `8501` to access the web server frontend from a web browser, as explained in the [server configuration section](#running-the-mqtt-broker-and-web-server) (but that's not relevant for the MQTT communication with the device).
 
 
-## Running on Jetson Nano Developer Kit using balenaOS
 
-[balenaOS](https://www.balena.io/os/) is a very light weight distribution designed for running containers on edge devices, which when combined with [balenaCloud](https://www.balena.io/cloud/) has a number of advantages for fleet deployment and management. In this section we'll focus on how you can test our pre-built MaskCam container on *balenaOS* using a local development environment setup (i.e: without needing *balenaCloud* yet).
-Except for installing *balenaOS* and using a slightly modified launch command, this process is essentially the same as the Jetson Nano Development kit instructions above.
-
-If you want to use *balenaCloud* instead (i.e: see your device in the web dashboard), and you're willing to take some time to push the container to your own account, please check [Using balenaCloud](#using-balenacloud) at the end of this section.
-
-In any case, this will require a Jetson Nano Development Kit, a 32 gb or higher micro-sd card, and another computer (referred to here as main system) on the same network.
-
-### Installing balenaOS
-As mentioned, this procedure will not link your device with a *balenaCloud* account, but instead it will enable local development:
-
-1. Go to https://www.balena.io/os/, scroll down and download the development version for Nvidia Jetson Nano SD-CARD. Alternatively, if you want to use a *balenaCloud* account and already created an app, you can download the image using the *Add device* button from the dashboard, and this image will automatically link your device to this application when flashed.
-2. Go to https://www.balena.io/etcher/ and install *balenaEtcher*.
-3. In *balenaEtcher*, simply select the zip file you downloaded, and after inserting the sd card into your main system select it, then press the 'Flash!' icon.
-4. After the flashing process is completed, place the sd card into your Jetson Nano Development Kit, ensure the network cable is plugged into the device and power up the Jetson.
-
-### Installing balena CLI
-
-Use the instructions here https://github.com/balena-io/balena-cli/blob/master/INSTALL.md to install the balena CLI tool.
-
-### Connecting to your Jetson
-
-First, in a terminal on your main system run the command:
-```
-sudo balena scan
-```
-Note the ip address in the result.
-
-Next connect to your Jetson:
-```
-balena ssh <device address>.local
-```
-
-At this point you are in a console as root user on your Jetson running *balenaOS*. The commands from this point on are exactly the same as the instructions for running using JetPack on the Nano Developer Kit with the following differences.
-1. The `docker` command is replaced by `balena`
-2. Do not use the `--runtime nvidia` switch. It is automatic on *balenaOS* for Jetson and you will get errors if you include it.
-
-So issuing the following commands will run MaskCam:
-```
-$ balena pull maskcam/maskcam-beta
-
-$ balena run --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=<device ip address> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
-```
-
-### Using balenaCloud
-If you want to manage your device from a remote web dashboard (among other features), you can create a free *balenaCloud* account that will allow you to link up to 10 devices, in order to test some of the most interesting capabilities of the platform.
-You'll need to create an App, install the balena CLI and then follow these instructions in order to deploy the maskcam container to your app:
-
-https://www.balena.io/docs/learn/deploy/deployment/
-
-For a simple use case, once your device is linked with your app (which we'll call `myApp` here) you can just use the `balena push myApp` command from the root directory of this project in your development computer (it will take a long time while it builds and pushes the whole image). Once the image is pushed to your application, all your linked devices will start downloading it automatically and then start running.
-But you should familiarize yourself with the platform and use the deployment method that better fits your needs.
 
 ## Accessing the MaskCam container
 ### Development mode: manually running MaskCam
@@ -322,48 +261,18 @@ fg %1
 # Now you can hit Ctrl+C to terminate streaming
 ```
 
-## Building from Source on Jetson Nano Developer Kit
-The easiest way to get Maskcam running or set up for development purposes, is by using a container like the one provided in the main [Dockerfile](Dockerfile), which provides the right versions of the OS (Ubuntu 18.04 / Bionic Beaver) and all the system level packages required (mainly NVIDIA L4T packages, GStreamer and DeepStream among others).
+## Additional Information and Next Steps
 
-For development, you could make modifications to the code or the container definition, and then rebuild locally using:
-```
-docker build . -t maskcam_custom
-```
+### Running on Jetson Nano Developer Kit using balenaOS
 
-The above building step could be executed in the target Jetson Nano device (easier), or in another development environment (i.e: pushing the result to [Docker Hub](https://hub.docker.com/) and then pulling from device).
+### Building from Source on Jetson Nano Developer Kit
 
-Either way, once the image is ready on the device, remember to run the container using the `--runtime nvidia` and `--privileged` flags (to access the camera device), and mapping the used ports (MQTT -1883-, static file serving -8080- and streaming -8554-, as defined in [maskcam_config.txt](maskcam_config.txt)):
-```
-docker run --runtime nvidia --privileged --rm -it -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam_custom
-```
+### Adapt your own Detection Model
 
-If you still want to better understand some of the [Dockerfile](Dockerfile) steps, or you need to run without a container and are willing to deal with version conflicts, please see the dependencies manual installation and building instructions at [docs/Manual-Dependency-Installation.md](docs/Manual-Dependencies-Installation.md)
-
-## Adapt your own Detection Model
-As mentioned above, MaskCam is a reference design for smart camera applications that need to perform computer vision tasks on the edge. Specifically, those involving **Object Detection** (for which you'll need a TensorRT engine) and **Tracking** (for which we use [Norfair](https://github.com/tryolabs/norfair)).
-
-Depending on the degree of similarity with this particular use case, you might need to just change the configuration file or some parts of the source code.
-
-### Changing the DeepStream model
-If you train a new model that is compatible with DeepStream, and has exactly the same (or a subset of the) object classes that are used in this project (`mask`, `no_mask`, `not_visible`, `misplaced`), then you only need to edit the configuration file.
-
-In particular, you should change only the corresponding parts of the [maskcam_config.txt](maskcam_config.txt) file, which are under the `[property]` section, and make them match your app's configuration parameters (usually under a file `config_infer_primary.txt` in NVIDIA sample apps). You should not need to change any of the `[face-processor]`, `[mqtt]` or `[maskcam]` sections of the config file, in order to use a new compatible model. Also, note that the `interval` parameter of that section will be ignored when `inference-interval-auto` is enabled.
-
-As an example, you'll find there's commented code showing how to use a `Detectnet_v2` model like the one trained using the [NVIDIA facemask app](https://github.com/NVIDIA-AI-IOT/face-mask-detection), but after converting the label names as mentioned above.
-
-Check the [DeepStream docs](https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_using_custom_model.html) for more information about how to convert a model in order to use it with DeepStream (in particular, the `nvinfer` GStreamer plugin).
-
-Remember to include your new model engine file in the [Dockerfile](Dockerfile) before building the container!
-
-### Changing the object labels
-If your custom model does not have exactly the same label names, you should edit the [maskcam_inference.py](maskcam/maskcam_inference.py) file, and change the constants `LABEL_MASK`, `LABEL_NO_MASK`, `LABEL_MISPLACED` and `LABEL_NOT_VISIBLE`, to match your needs.
-
-If your application has nothing to do with detecting face masks, then you'll probably need to change many other parts of the source code for this application, but a good place to start is the `FaceMaskProcessor` class definition, used in the same inference file, which contains all the code related to the DeepStream pipeline.
-
-## Running on Jetson Nano with Photon carrier board
+### Running on Jetson Nano with Photon carrier board
 Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
 
-## Useful development scripts
+### Useful development scripts
 During development, some scripts were produced which might be useful for
 other developers to debug or update the software. These include an MQTT sniffer,
 a script to run the TensorRT model on images, and to convert a model trained
