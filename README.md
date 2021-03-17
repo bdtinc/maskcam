@@ -19,7 +19,6 @@ MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.
   - [Running MaskCam from a Container on a Jetson Nano Developer Kit](#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit)
   - [Viewing the Live Video Stream](#viewing-the-live-video-stream)
   - [Setting Device Configuration Parameters](#setting-device-configuration-parameters)
-  - [Troubleshooting Common Errors](#troubleshooting-common-errors)
 - [MQTT Server Setup](#mqtt-server-setup)
   - [Running the MQTT Broker and Web Server](#running-the-mqtt-broker-and-web-server)
   - [Setup a Device with Your Server](#setup-a-device-with-your-server)
@@ -35,6 +34,7 @@ MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.
   - [Installing MaskCam Manually (Without a Container)](#installing-maskcam-manually-without-a-container)
   - [Running on Jetson Nano with Photon Carrier Board](#running-on-jetson-nano-with-photon-carrier-board)
   - [Useful Development Scripts](#useful-development-scripts)
+- [Troubleshooting Common Errors](#troubleshooting-common-errors)
 
 
 ## Start Here!
@@ -60,7 +60,7 @@ Make sure a USB camera is connected to the Nano, and then start MaskCam by runni
 sudo docker run --runtime nvidia --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
-The MaskCam container should start running the `maskcam_run.py` script, using the USB camera as the default input device (`/dev/video0`). It will produce various status output messages (and error messages, if it encounters problems). If there are errors, the process will automatically end after several seconds. Check the [Troubleshooting](#troubleshooting) section for tips on resolving errors.
+The MaskCam container should start running the `maskcam_run.py` script, using the USB camera as the default input device (`/dev/video0`). It will produce various status output messages (and error messages, if it encounters problems). If there are errors, the process will automatically end after several seconds. Check the [Troubleshooting](#troubleshooting-common-errors) section for tips on resolving errors.
 
 Otherwise, it should continually generate status messages (such as `Processed 100 frames...`). Leave it running (don't press `Ctrl+C`, but be aware that the device will start heating up) and continue to the next section to visualize the video!
 
@@ -78,6 +78,8 @@ You can copy-paste that URL into your RSTP streaming viewer ([see how](https://u
 </p>
 
 This video stream gives a general demonstration of how MaskCam works. However, MaskCam also has other features, such as the ability to send mask detection statistics to the cloud and view them through a web browser. If you'd like to see these features in action, you'll need to set up an MQTT server, which is covered in the [MQTT Server Setup section](#mqtt-server-setup).
+
+If you encounter any errors running the live stream, check the [Troubleshooting](#troubleshooting-common-errors) section for tips on resolving errors.
 
 ### Setting Device Configuration Parameters
 MaskCam uses environment variables to configure parameters without having to rebuild the container or manually change the configuration file each time the program is run. For example, in the previous section we set the `MASKCAM_DEVICE_ADDRESS` variable to indicate our Nano's IP address. A list of configurable parameters is shown in [maskcam_config.txt](maskcam_config.txt). The mapping between environment variable names and configuration parameters is defined in [maskcam/config.py](maskcam/config.py).
@@ -99,38 +101,6 @@ sudo docker run --runtime nvidia --privileged --rm -it --env MQTT_BROKER_IP=<ser
 
 *If you have too many `--env` variables to add, it might be easier to create a [.env file](https://docs.docker.com/compose/env-file/) and point to it using the `--env-file` flag instead.*
 
-### Troubleshooting Common Errors
-MaskCam actually consists of many different processes running in parallel. As a consequence, when there's an error on a particular process, all of them will be sent termination signals and finish gracefully. This means that you need to scroll up through the output to find out the original error that caused a failure. It should be very notorious, flagged as a red **ERROR** log entry, followed by the name of the process that failed and a message.
-
-#### Error: camera not connected/not recognized
-If you see an error containing the message `Cannot identify device '/dev/video0'`, among other Gst and v4l information, it means the program couldn't find the camera device. Make sure your camera is connected to the Nano and recognized by the host Ubuntu OS by issuing `ls /dev` and checking if `/dev/video0` is present in the output.
-
-#### Error: not running in privileged mode
-In this case, you'll see a bunch of annoying messages like:
-```
-Error: Can't initialize nvrm channel
-Couldn't create ddkvic Session: Cannot allocate memory
-nvbuf_utils: Could not create Default NvBufferSession
-```
-You'll probably see multiple failures in other MaskCam processes as well. To resolve these errors, make sure you're running docker with the `--privileged` flag, as described in the [first section](#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit).
-
-#### Error: reason not negotiated/camera capabilities
-If you get an error that looks like: `v4l-camera-source / reason not-negotiated`
-Then the problem is that the USB camera you're using doesn't support the default `camera-framerate=30` (frames per second). If you don't have another camera, try running the script under utils/gst_capabilities.sh and find the lines with type `video/x-raw ...`
-
-Find any suitable `framerate=X/1` (with `X` being an integer like 24, 15, etc.) and set the corresponding configuration parameter with `--env MASKCAM_CAMERA_FRAMERATE=X` (see [previous section](#setting-device-configuration-parameters)).
-
-#### Error: Streaming or file server are not accessible (nothing else seems to fail)
-Make sure you're mapping the right ports from the container, with the `-p container_port:host_port` parameters indicated in the previous sections. The default port numbers, that should be exposed by the container, are configured in [maskcam_config.txt](maskcam_config.txt) as:
-```
-fileserver-port=8080
-streaming-port=8554
-mqtt-broker-port=1883
-```
-These port mappings are why we use `docker run ...  -p 1883:1883 -p 8080:8080 -p 8554:8554 ...` with the run command. Remember that all the ports can be overriden using environment variables, as described in the [previous section](#setting-device-configuration-parameters). Other ports like `udp-port-*` are not intended to be accessible from outside the container, they are used for communication between the inference process and the streaming and file-saving processes.
-
-#### Other Errors
-Sometimes after restarting the process or the whole docker container many times, some GPU resources can get stuck and cause unexpected errors. If that's the case, try rebooting the device and running the container again. If you find that the container fails systematically after running some sequence, please don't hesitate to [report an Issue](https://github.com/bdtinc/maskcam/issues) with the relevant context and we'll try to reproduce and fix it.
 
 ## MQTT Server Setup
 ### Running the MQTT Broker and Web Server
@@ -171,7 +141,7 @@ POSTGRES_DB=maskcam
 After editing the database environment file, you're ready to build all the containers and run them with a single command:
 
 ```
-docker-compose up -d
+sudo docker-compose up -d
 ```
 
 Wait a couple minutes after issuing the command to make sure that all containers are built and running. Then, check the local IP of your computer by issuing `ifconfig`. (It should be an address that starts with `192.168...`, `10...` or `172...`.) This is the server IP that will be used for connecting to the server (since the server is hosted on this computer).
@@ -190,7 +160,7 @@ Once you've got the server set up on a local machine (or in a AWS EC2 instance w
 
 ```
 # Run with MQTT_BROKER_IP, MQTT_DEVICE_NAME, and MASKCAM_DEVICE_ADDRESS
-docker run --runtime nvidia --privileged --rm -it --env MQTT_BROKER_IP=<server IP> --env MQTT_DEVICE_NAME=my-jetson-1 --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+sudo docker run --runtime nvidia --privileged --rm -it --env MQTT_BROKER_IP=<server IP> --env MQTT_DEVICE_NAME=my-jetson-1 --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
 And that's it. If the device has access to the server's IP, then you should see in the output logs some successful connection messages and then see your device listed in the drop-down menu of the frontend (reload the page if you don't see it). In the frontend, select `Group data by: Second` and hit `Refresh status` to see how the plot changes when new data arrives.
@@ -289,3 +259,39 @@ For our hardware prototype of MaskCam, we used a Jetson Nano module and a [Conne
 
 ### Useful Development Scripts
 During development, some scripts were produced which might be useful for other developers to debug or update the software. These include an MQTT sniffer, a script to run the TensorRT model on images, and to convert a model trained with the original YOLO Darknet implementation to TensorRT format. Basic usage for all these tools is covered on [docs/Useful-Development-Scripts.md](docs/Useful-Development-Scripts.md).
+
+
+## Troubleshooting Common Errors
+If you run into any errors or issues while working with MaskCam, this section gives common errors and their solutions. 
+
+MaskCam consists of many different processes running in parallel. As a consequence, when there's an error on a particular process, all of them will be sent termination signals and finish gracefully. This means that you need to scroll up through the output to find out the original error that caused a failure. It should be very notorious, flagged as a red **ERROR** log entry, followed by the name of the process that failed and a message.
+
+#### Error: camera not connected/not recognized
+If you see an error containing the message `Cannot identify device '/dev/video0'`, among other Gst and v4l information, it means the program couldn't find the camera device. Make sure your camera is connected to the Nano and recognized by the host Ubuntu OS by issuing `ls /dev` and checking if `/dev/video0` is present in the output.
+
+#### Error: not running in privileged mode
+In this case, you'll see a bunch of annoying messages like:
+```
+Error: Can't initialize nvrm channel
+Couldn't create ddkvic Session: Cannot allocate memory
+nvbuf_utils: Could not create Default NvBufferSession
+```
+You'll probably see multiple failures in other MaskCam processes as well. To resolve these errors, make sure you're running docker with the `--privileged` flag, as described in the [first section](#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit).
+
+#### Error: reason not negotiated/camera capabilities
+If you get an error that looks like: `v4l-camera-source / reason not-negotiated`
+Then the problem is that the USB camera you're using doesn't support the default `camera-framerate=30` (frames per second). If you don't have another camera, try running the script under utils/gst_capabilities.sh and find the lines with type `video/x-raw ...`
+
+Find any suitable `framerate=X/1` (with `X` being an integer like 24, 15, etc.) and set the corresponding configuration parameter with `--env MASKCAM_CAMERA_FRAMERATE=X` (see [previous section](#setting-device-configuration-parameters)).
+
+#### Error: Streaming or file server are not accessible (nothing else seems to fail)
+Make sure you're mapping the right ports from the container, with the `-p container_port:host_port` parameters indicated in the previous sections. The default port numbers, that should be exposed by the container, are configured in [maskcam_config.txt](maskcam_config.txt) as:
+```
+fileserver-port=8080
+streaming-port=8554
+mqtt-broker-port=1883
+```
+These port mappings are why we use `docker run ...  -p 1883:1883 -p 8080:8080 -p 8554:8554 ...` with the run command. Remember that all the ports can be overriden using environment variables, as described in the [previous section](#setting-device-configuration-parameters). Other ports like `udp-port-*` are not intended to be accessible from outside the container, they are used for communication between the inference process and the streaming and file-saving processes.
+
+#### Other Errors
+Sometimes after restarting the process or the whole docker container many times, some GPU resources can get stuck and cause unexpected errors. If that's the case, try rebooting the device and running the container again. If you find that the container fails systematically after running some sequence, please don't hesitate to [report an Issue](https://github.com/bdtinc/maskcam/issues) with the relevant context and we'll try to reproduce and fix it.
