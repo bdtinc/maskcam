@@ -12,7 +12,7 @@ The on-device software stack is mostly written in Python and runs under JetPack 
 
 We urge you to try it out! It’s easy to install on a Jetson Nano Dev Kit and requires only a web cam. (The cloud-based statistics server and web GUI are optional, but are also dockerized and easy to install on any reasonable Linux system.)  [See below for installation instructions.](https://github.com/tryolabs/bdti-jetson#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit)
 
-MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.A., with development funded by NVIDIA. MaskCam is offered under the MIT License. For more information about MaskCam, please see the [white paper from BDTI](https://www.bdti.com/maskcam).
+MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.A., with development funded by NVIDIA. MaskCam is offered under the MIT License. For more information about MaskCam, please see the [report from BDTI](https://www.bdti.com/maskcam). If you have questions, please email us at maskcam@bdti.com. Thanks!
 
 ## Table of contents <!-- omit in toc -->
 - [Start Here!](#start-here)
@@ -134,7 +134,7 @@ Sometimes after restarting the process or the whole docker container many times,
 
 ## MQTT Server Setup
 ### Running the MQTT Broker and Web Server
-MaskCam is intended to be set up with a web server that stores mask detection statistics and allows users to remotely interact with the device. We've created a [server](server/) that receives statistics from the device, stores them in a database, and has a web-based GUI frontend to display them. A screenshot of the frontend for an example device is shown below.
+MaskCam is intended to be set up with a web server that stores mask detection statistics and allows users to remotely interact with the device. We wrote code for instantiating a [server](server/) that receives statistics from the device, stores them in a database, and has a web-based GUI frontend to display them. A screenshot of the frontend for an example device is shown below.
 
 <p align="center">
   <img src="/docs/imgs/maskcam-frontend.PNG">
@@ -159,7 +159,7 @@ cp frontend.env.template frontend.env
 cp backend.env.template backend.env
 ```
 
-The only file that needs to be changed is `database.env`. Open it with a text editor and replace the `<DATABASE_USER>`, `<DATABASE_PASSWORD>`, and `<DATABASE_NAME>` fields with your own values. Here are some example values, but you better be creative for security reasons:
+The only file that needs to be changed is `database.env`. Open it with a text editor and replace the `<DATABASE_USER>`, `<DATABASE_PASSWORD>`, and `<DATABASE_NAME>` fields with your own values. Here are some example values, but you better be more creative for security reasons:
 ```
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=some_password
@@ -174,7 +174,7 @@ After editing the database environment file, you're ready to build all the conta
 docker-compose up -d
 ```
 
-Wait a couple minutes after issuing the command to make sure that all containers are built and running. Then, check the IP of your server by issuing `ifconfig` (you might use `127.0.0.1` for testing if the server is on your current computer, but remember to use your computer's network address instead when accessing from the Jetson)
+Wait a couple minutes after issuing the command to make sure that all containers are built and running. Then, check the local IP of your computer by issuing `ifconfig`. (It should be an address that starts with `192.168...`, `10...` or `172...`.) This is the server IP that will be used for connecting to the server (since the server is hosted on this computer).
 
 Next, open a web browser and enter the server IP to visit the frontend webpage:
 ```
@@ -202,12 +202,12 @@ And that's it. If the device has access to the server's IP, then you should see 
 Check the next section if the MQTT connection is not established from the device to the server.
 
 ### Checking MQTT Connection
-If you're running the MQTT broker on a machine in your local network, make sure it's IP is accessible from the jetson device:
+If you're running the MQTT broker on a machine in your local network, make sure its IP is accessible from the Jetson device:
 ```
 ping <local server IP>
 ```
 
-*NOTE:* Remember not to use `127.0.0.1` as your server IP, but the network address of your computer instead, which you can check using the `ifconfig` command and looking for an address that should start with `192.168...`, `10...` or `172...`
+*NOTE:* Remember to use the network address of the computer you set up the server on, which you can check using the `ifconfig` command and looking for an address that should start with `192.168...`, `10...` or `172...`
 
 If you're setting up a remote server and using it's public IP to connect
 from your device, chances are you're not setting properly the port `1883` to be opened for inbound and outbound traffic.
