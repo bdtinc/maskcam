@@ -10,7 +10,7 @@ MaskCam can be run on a Jetson Nano Developer Kit, or on a Jetson Nano module (S
 
 The on-device software stack is mostly written in Python and runs under JetPack 4.4.1 or 4.5. Edge AI processing is handled by NVIDIA’s DeepStream video analytics framework, YOLOv4-tiny, and Tryolabs' [Norfair](https://github.com/tryolabs/norfair) tracker.  MaskCam reports statistics to and receives commands from the cloud using MQTT and a web-based GUI. The software is containerized and for evaluation can be easily installed on a Jetson Nano DevKit using docker with just a couple of commands. For production, MaskCam can run under balenaOS, which makes it easy to manage and deploy multiple devices.
 
-We urge you to try it out! It’s easy to install on a Jetson Nano Developer Kit and requires only a web cam. (The cloud-based statistics server and web GUI are optional, but are also dockerized and easy to install on any reasonable Linux system.)  [See below for installation instructions.](https://github.com/tryolabs/bdti-jetson#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit)
+We urge you to try it out! It’s easy to install on a Jetson Nano Developer Kit and requires only a web cam. (The cloud-based statistics server and web GUI are optional, but are also dockerized and easy to install on any reasonable Linux system.)  [See below for installation instructions.](#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit)
 
 MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.A., with development funded by NVIDIA. MaskCam is offered under the MIT License. For more information about MaskCam, please see the [report from BDTI](https://www.bdti.com/maskcam). If you have questions, please email us at maskcam@bdti.com. Thanks!
 
@@ -19,7 +19,7 @@ MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.
   - [Running MaskCam from a Container on a Jetson Nano Developer Kit](#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit)
   - [Viewing the Live Video Stream](#viewing-the-live-video-stream)
   - [Setting Device Configuration Parameters](#setting-device-configuration-parameters)
-- [MQTT Server Setup](#mqtt-server-setup)
+- [MQTT Server Setup](#mqtt-and-web-server-setup)
   - [Running the MQTT Broker and Web Server](#running-the-mqtt-broker-and-web-server)
   - [Setup a Device with Your Server](#setup-a-device-with-your-server)
   - [Checking MQTT Connection](#checking-mqtt-connection)
@@ -77,7 +77,7 @@ You can copy-paste that URL into your RSTP streaming viewer ([see how](https://u
   <img src="/docs/imgs/MaskCam-Live1.gif">
 </p>
 
-This video stream gives a general demonstration of how MaskCam works. However, MaskCam also has other features, such as the ability to send mask detection statistics to the cloud and view them through a web browser. If you'd like to see these features in action, you'll need to set up an MQTT server, which is covered in the [MQTT Server Setup section](#mqtt-server-setup).
+This video stream gives a general demonstration of how MaskCam works. However, MaskCam also has other features, such as the ability to send mask detection statistics to the cloud and view them through a web browser. If you'd like to see these features in action, you'll need to set up an MQTT server, which is covered in the [MQTT Server Setup section](#mqtt-and-web-server-setup).
 
 If you encounter any errors running the live stream, check the [Troubleshooting](#troubleshooting-common-errors) section for tips on resolving errors.
 
@@ -91,7 +91,7 @@ This section shows how to set environment variables to change configuration para
 sudo docker run --runtime nvidia --privileged --rm -it --env MASKCAM_INPUT=v4l2:///dev/video1 --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
-As another example, if you have an already set up our MQTT and web server (as shown in [MQTT Server Setup section](#mqtt-server-setup)), you need to define
+As another example, if you have an already set up our MQTT and web server (as shown in [MQTT Server Setup section](#mqtt-and-web-server-setup)), you need to define
 two addtional environment variables, `MQTT_BROKER_IP` and `MQTT_DEVICE_NAME`. This allows your device to find the MQTT server and identify itself:
 
 ```
