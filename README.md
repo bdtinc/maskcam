@@ -19,14 +19,14 @@ MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.
   - [Running the MQTT Broker and Web Server](#running-the-mqtt-broker-and-web-server)
   - [Setup a Device with Your Server](#setup-a-device-with-your-server)
   - [Checking MQTT Connection](#checking-mqtt-connection)
-- [Accessing the MaskCam Container](#accessing-the-maskcam-container)
+- [Working With the MaskCam Container](#working-with-the-maskcam-container)
   - [Development Mode: Manually Running MaskCam](#development-mode-manually-running-maskcam)
   - [Debugging: Running MaskCam Modules as Standalone Processes](#debugging-running-maskcam-modules-as-standalone-processes)
 - [Additional Information](#additional-information)
   - [Running on Jetson Nano Developer Kit Using BalenaOS](#running-on-jetson-nano-developer-kit-using-balenaos)
   - [Custom Container Development](#custom-container-development)
-  - [Building From Source on Jetson Nano Developer Kit](#building-from-source-on-jetson-nano-developer-kit)
-  - [Adapt Your Own Detection Model](#adapt-your-own-detection-model)
+    - [Building From Source on Jetson Nano Developer Kit](#building-from-source-on-jetson-nano-developer-kit)
+    - [Using Your Own Detection Model](#using-your-own-detection-model)
   - [Running on Jetson Nano with Photon Carrier Board](#running-on-jetson-nano-with-photon-carrier-board)
   - [Useful Development Scripts](#useful-development-scripts)
 
@@ -211,7 +211,7 @@ Remember you also need to open port `8501` to access the web server frontend fro
 
 
 
-## Accessing the MaskCam Container
+## Working With the MaskCam Container
 ### Development Mode: Manually Running MaskCam
 If you want to play around with the code, you probably don't want the container to automatically start running the `maskcam_run.py` script.
 The easiest way to achieve that, is by defining the environment variable `DEV_MODE=1`:
@@ -262,20 +262,25 @@ fg %1
 ```
 
 ## Additional Information
+Further information about working with and customizing MaskCam is provided on separate pages in the [docs](docs) folder. This section gives a brief description and link to each page.
 
 ### Running on Jetson Nano Developer Kit Using BalenaOS
+[BalenaOS](https://www.balena.io/os/) is a lightweight operating system designed for running containers on embedded devices. It provides several advantages for fleet deployment and management, especially when combined with balena's balenaCloud mangament system. If you'd like to try running MaskCam with balenaOS instead of JetPack OS on your Jetson Nano, please follow the instructions at [BalenaOS-DevKit-Nano-Setup.md](docs/BalenaOS-DevKit-Nano-Setup.md).
 
-### Building From Source on Jetson Nano Developer Kit
+### Custom Container Development
+MaskCam is intended to be a reference design for any connected smart camera application. You can create your own application by starting from our pre-built container, modifying it to add the code files and packages needed for your program, and then re-building the container. The [Custom-Container-Development.md](docs/Custom-Container-Development.md) gives instructions on how to build your own container based off MaskCam.
 
-### Adapt Your Own Detection Model
+#### Building From Source on Jetson Nano Developer Kit
+Please see [How to Build your Own Container from Source on the Jetson Nano](https://github.com/bdtinc/maskcam/blob/main/docs/Custom-Container-Development.md#how-to-build-your-own-container-from-source-on-the-jetson-nano) for instructions on how to build a custom MaskCam container on your Jetson Nano Developer Kit.
+
+#### Using Your Own Detection Model
+Please see [How to Use Your Own Detection Model](https://github.com/bdtinc/maskcam/blob/main/docs/Custom-Container-Development.md#how-to-use-your-own-detection-model) for instructions on how to use your own detection model rather than our mask detection model.
+
+### Installing MaskCam Manually (Without a Container)
+MaskCam can also be installed manually, rather than by downloading our pre-built container. Using a manual installation of MaskCam can help with development if you'd prefer not to work with containers. If you'd like to install MaskCam without using containers, please see [docs/Manual-Dependencies-Installation.md](docs/Manual-Dependencies-Installation.md).
 
 ### Running on Jetson Nano with Photon Carrier Board
-Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
+For our hardware prototype of MaskCam, we used a Jetson Nano module and a [Connect Tech Photon carrier board](https://connecttech.com/product/photon-jetson-nano-ai-camera-platform/), rather than the Jetson Nano Developer Kit. We used the Photon because the Developer Kit is not sold or warrantied for production use. Using the Photon allowed us to quickly create a production-ready prototype using off-the-shelf hardware. If you have a Photon carrier board and Jetson Nano module, you can install MaskCam on them by using the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md).
 
 ### Useful Development Scripts
-During development, some scripts were produced which might be useful for
-other developers to debug or update the software. These include an MQTT sniffer,
-a script to run the TensorRT model on images, and to convert a model trained
-with the original YOLO Darknet implementation to TensorRT.
-
-Basic usage for all these tools is covered on [docs/Useful-Development-Scripts.md](docs/Useful-Development-Scripts.md).
+During development, some scripts were produced which might be useful for other developers to debug or update the software. These include an MQTT sniffer, a script to run the TensorRT model on images, and to convert a model trained with the original YOLO Darknet implementation to TensorRT format. Basic usage for all these tools is covered on [docs/Useful-Development-Scripts.md](docs/Useful-Development-Scripts.md).
