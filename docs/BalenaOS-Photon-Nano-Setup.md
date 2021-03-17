@@ -1,8 +1,6 @@
 # BalenaOS Photon Nano Setup Instructions for MaskCam
 This page provides step-by-step instructions for setting up the Connect Tech Photon-based Nano with balenaOS. BalenaOS is a barebones host operating system optimized for running Docker containers. It allows MaskCam to easily be installed as a container and remotely updated or configured. This is the configuration used for our production MaskCam device.
 
-*Note (to be removed later): This document will basically be a copy of https://github.com/tryolabs/bdti-jetson/blob/main/docs/BalenaOS-DeveloperKit-Nano-Setup.md except there will be different instructions for flashing the eMMC chip and setting up the CTI-Photon DTB file*
-
 ## Setup Instructions
 
 ### 1. Create balena account
