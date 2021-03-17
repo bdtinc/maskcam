@@ -71,8 +71,11 @@ If you scroll through the logs and don't see any errors, you should find a messa
 
 where `aaa.bbb.ccc.ddd` is the address that you provided in `MASKCAM_DEVICE_ADDRESS` previously. If you didn't provide an address, you'll see some unknown address label there, but the streaming will still work.
 
-You can copy-paste that URL into your RSTP streaming viewer ([see how](https://user-images.githubusercontent.com/12506292/111346333-e14d8800-865c-11eb-9242-0ffa4f50547f.mp4) to do it with VLC) on another computer. If all goes well,
-you should be rewarded with streaming video of your Nano, with green boxes around faces wearing masks and red boxes around faces not wearing masks.
+You can copy-paste that URL into your RSTP streaming viewer ([see how](https://user-images.githubusercontent.com/12506292/111346333-e14d8800-865c-11eb-9242-0ffa4f50547f.mp4) to do it with VLC) on another computer. If all goes well, you should be rewarded with streaming video of your Nano, with green boxes around faces wearing masks and red boxes around faces not wearing masks. An example video of the live streaming in action is shown below.
+
+<p align="center">
+  <img src="/docs/imgs/MaskCam-Live1.gif">
+</p>
 
 This video stream gives a general demonstration of how MaskCam works. However, MaskCam also has other features, such as the ability to send mask detection statistics to the cloud and view them through a web browser. If you'd like to see these features in action, you'll need to set up an MQTT server, which is covered in the [MQTT Server Setup section](#mqtt-server-setup).
 
@@ -134,7 +137,7 @@ Sometimes after restarting the process or the whole docker container many times,
 MaskCam is intended to be set up with a web server that stores mask detection statistics and allows users to remotely interact with the device. We've created a [server](server/) that receives statistics from the device, stores them in a database, and has a web-based GUI frontend to display them. A screenshot of the frontend for an example device is shown below.
 
 <p align="center">
-  <img src="/docs/imgs/maskcam-frontend1.png">
+  <img src="/docs/imgs/maskcam-frontend.PNG">
 </p>
 
 You can test out and explore this functionality by starting the server on a PC on your local network and pointing your Jetson Nano MaskCam device to it. This section gives instructions on how to do so. The MQTT broker and web server can be built and run on a Linux or OSX machine; we've tested it on Ubuntu 18.04LTS and OSX Big Sur.
