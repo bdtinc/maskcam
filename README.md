@@ -12,23 +12,23 @@ MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.
 ## Table of contents <!-- omit in toc -->
 - [Start Here!](#start-here)
   - [Running MaskCam from a Container on a Jetson Nano Developer Kit](#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit)
-  - [Viewing the video streaming](#viewing-the-video-streaming)
-  - [Setting device configuration parameters](#setting-device-configuration-parameters)
-  - [Troubleshooting common errors](#troubleshooting)
+  - [Viewing the Live Video Stream](#viewing-the-live-video-stream)
+  - [Setting Device Configuration Parameters](#setting-device-configuration-parameters)
+  - [Troubleshooting Common Errors](#troubleshooting-common-errors)
 - [MQTT Server Setup](#mqtt-server-setup)
   - [Running the MQTT Broker and Web Server](#running-the-mqtt-broker-and-web-server)
-  - [Setup a device with your server](#setup-a-device-with-your-server)
-  - [Checking MQTT connection](#checking-mqtt-connection)
-- [Accessing the MaskCam container](#accessing-the-maskcam-container)
-  - [Development mode: manually running MaskCam](#development-mode-manually-running-maskcam)
-  - [Debugging: running MaskCam modules as standalone processes](#debugging-running-maskcam-modules-as-standalone-processes)
-- Additional information and next steps (add link)
-  - [Running on Jetson Nano Developer Kit using balenaOS](#running-on-jetson-nano-developer-kit-using-balenaos)
-  - Custom container development (add link)
-  - [Building from Source on Jetson Nano Developer Kit](#building-from-source-on-jetson-nano-developer-kit)
-  - [Adapt your own detection model](#adapt-your-own-detection-model)
-  - [Running on Jetson Nano with Photon carrier board](#running-on-jetson-nano-with-photon-carrier-board)
-  - [Useful development scripts](#useful-development-scripts)
+  - [Setup a Device with Your Server](#setup-a-device-with-your-server)
+  - [Checking MQTT Connection](#checking-mqtt-connection)
+- [Accessing the MaskCam Container](#accessing-the-maskcam-container)
+  - [Development Mode: Manually Running MaskCam](#development-mode-manually-running-maskcam)
+  - [Debugging: Running MaskCam Modules as Standalone Processes](#debugging-running-maskcam-modules-as-standalone-processes)
+- [Additional Information](#additional-information)
+  - [Running on Jetson Nano Developer Kit Using BalenaOS](#running-on-jetson-nano-developer-kit-using-balenaos)
+  - [Custom Container Development](#custom-container-development)
+  - [Building From Source on Jetson Nano Developer Kit](#building-from-source-on-jetson-nano-developer-kit)
+  - [Adapt Your Own Detection Model](#adapt-your-own-detection-model)
+  - [Running on Jetson Nano with Photon Carrier Board](#running-on-jetson-nano-with-photon-carrier-board)
+  - [Useful Development Scripts](#useful-development-scripts)
 
 
 ## Start Here!
@@ -58,7 +58,7 @@ The MaskCam container should start running the `maskcam_run.py` script, using th
 
 Otherwise, it should continually generate status messages (such as `Processed 100 frames...`). Leave it running (don't press `Ctrl+C`, but be aware that the device will start heating up) and continue to the next section to visualize the video!
 
-### Viewing the video streaming
+### Viewing the Live Video Stream
 If you scroll through the logs and don't see any errors, you should find a message like:
 
 ```Streaming at rtsp://aaa.bbb.ccc.ddd:8554/maskcam```
@@ -70,7 +70,7 @@ you should be rewarded with streaming video of your Nano, with green boxes aroun
 
 This video stream gives a general demonstration of how MaskCam works. However, MaskCam also has other features, such as the ability to send mask detection statistics to the cloud and view them through a web browser. If you'd like to see these features in action, you'll need to set up an MQTT server, which is covered in the [MQTT Server Setup section](#mqtt-server-setup).
 
-### Setting device configuration parameters
+### Setting Device Configuration Parameters
 MaskCam uses environment variables to configure parameters without having to rebuild the container or manually change the configuration file each time the program is run. For example, in the previous section we set the `MASKCAM_DEVICE_ADDRESS` variable to indicate our Nano's IP address. A list of configurable parameters is shown in [maskcam_config.txt](maskcam_config.txt). The mapping between environment variable names and configuration parameters is defined in [maskcam/config.py](maskcam/config.py).
 
 This section shows how to set environment variables to change configuration parameters. For example, if you want to use the `/dev/video1` camera device rather than `/dev/video0`, you can define `MASKCAM_INPUT` when running the container:
@@ -90,7 +90,7 @@ sudo docker run --runtime nvidia --privileged --rm -it --env MQTT_BROKER_IP=<ser
 
 *If you have too many `--env` variables to add, it might be easier to create a [.env file](https://docs.docker.com/compose/env-file/) and point to it using the `--env-file` flag instead.*
 
-### Troubleshooting
+### Troubleshooting Common Errors
 MaskCam actually consists of many different processes running in parallel. As a consequence, when there's an error on a particular process, all of them will be sent termination signals and finish gracefully. This means that you need to scroll up through the output to find out the original error that caused a failure. It should be very notorious, flagged as a red **ERROR** log entry, followed by the name of the process that failed and a message.
 
 #### Error: camera not connected/not recognized
@@ -176,7 +176,7 @@ If you see a `ConnectionError` in the frontend, wait a couple more seconds and r
 *NOTE:* If you're setting the server up on a remote instance like an AWS EC2, make sure you have ports `1883` (MQTT) and `8501` (web frontend) open for inbound and outbound traffic.
 
 
-### Setup a device with your server
+### Setup a Device With Your Server
 
 After configuring the server (locally or in an AWS EC2 instance with public IP),
 and making sure that port `1883` of your server is accessible for inbound and
@@ -192,7 +192,7 @@ And that's it. If the device has access to the server's IP, then you should see 
 
 Check the next section if the MQTT connection is not established from the device to the server.
 
-### Checking MQTT connection
+### Checking MQTT Connection
 If you're running the MQTT broker on a machine in your local network, make sure it's IP is accessible from the jetson device:
 ```
 ping <local server IP>
@@ -211,8 +211,8 @@ Remember you also need to open port `8501` to access the web server frontend fro
 
 
 
-## Accessing the MaskCam container
-### Development mode: manually running MaskCam
+## Accessing the MaskCam Container
+### Development Mode: Manually Running MaskCam
 If you want to play around with the code, you probably don't want the container to automatically start running the `maskcam_run.py` script.
 The easiest way to achieve that, is by defining the environment variable `DEV_MODE=1`:
 ```
@@ -229,7 +229,7 @@ of its sub-modules as standalone processes:
 MASKCAM_DISABLE_TRACKER=1 ./maskcam_run.py
 ```
 
-### Debugging: running MaskCam modules as standalone processes
+### Debugging: Running MaskCam Modules as Standalone Processes
 Actually, the script `maskcam_run.py`, which is the main entrypoint for the MaskCam software, has two roles:
  - Handles all the MQTT communication (send stats and receive commands)
  - Orchestrates all other processes that live under `maskcam/maskcam_*.py`.
@@ -261,18 +261,18 @@ fg %1
 # Now you can hit Ctrl+C to terminate streaming
 ```
 
-## Additional Information and Next Steps
+## Additional Information
 
-### Running on Jetson Nano Developer Kit using balenaOS
+### Running on Jetson Nano Developer Kit Using BalenaOS
 
-### Building from Source on Jetson Nano Developer Kit
+### Building From Source on Jetson Nano Developer Kit
 
-### Adapt your own Detection Model
+### Adapt Your Own Detection Model
 
-### Running on Jetson Nano with Photon carrier board
+### Running on Jetson Nano with Photon Carrier Board
 Please see the setup instructions at [docs/Photon-Nano-Setup.md](docs/Photon-Nano-Setup.md) for how to set up and run MaskCam on the Photon Nano.
 
-### Useful development scripts
+### Useful Development Scripts
 During development, some scripts were produced which might be useful for
 other developers to debug or update the software. These include an MQTT sniffer,
 a script to run the TensorRT model on images, and to convert a model trained
