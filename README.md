@@ -27,6 +27,7 @@ MaskCam was developed by Berkeley Design Technology, Inc. (BDTI) and Tryolabs S.
   - [Custom Container Development](#custom-container-development)
     - [Building From Source on Jetson Nano Developer Kit](#building-from-source-on-jetson-nano-developer-kit)
     - [Using Your Own Detection Model](#using-your-own-detection-model)
+  - [Installing MaskCam Manually (Without a Container)](#installing-maskcam-manually-without-a-container)
   - [Running on Jetson Nano with Photon Carrier Board](#running-on-jetson-nano-with-photon-carrier-board)
   - [Useful Development Scripts](#useful-development-scripts)
 
