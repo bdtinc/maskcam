@@ -2,8 +2,8 @@
 The MaskCam code in this repository can be used as a starting point for developing your own smart camera application. If you'd like to develop a custom application (for example, a dog detector that counts how many dogs walk past your house and reports the count to a server), you can build your own container that has the custom code, files, and packages used for your unique application. This page gives instructions on how to build a custom container, rather than downloading our pre-built container from Docker. 
 
 This page is split in to two sections:
-- How to Build Your Own Container from Source on the Jetson Nano (add link)
-- How to Use Your Own Detection Model (rather than a mask detection model) (add link)
+- [How to Build Your Own Container from Source on the Jetson Nano](#how-to-build-your-own-container-from-source-on-the-jetson-nano)
+- [How to Use Your Own Detection Model](#how-to-use-your-own-detection-model)
 
 ## How to Build Your Own Container from Source on the Jetson Nano
 The easiest way to get Maskcam running or set up for development purposes, is by using a container like the one provided in the main [Dockerfile](Dockerfile), which provides the right versions of the OS (Ubuntu 18.04 / Bionic Beaver) and all the system level packages required (mainly NVIDIA L4T packages, GStreamer and DeepStream among others).
