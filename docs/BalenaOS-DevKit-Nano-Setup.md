@@ -20,7 +20,7 @@ After the flashing process is completed, place the sd card into your Jetson Nano
 
 ### Installing balena CLI
 
-Use the instructions here https://github.com/balena-io/balena-cli/blob/master/INSTALL.md to install the balena CLI tool.
+Use [these instructions](https://github.com/balena-io/balena-cli/blob/master/INSTALL.md) to install the balena CLI tool.
 
 ### Connecting to your Jetson
 
@@ -32,7 +32,7 @@ Note the ip address in the result.
 
 Next connect to your Jetson:
 ```
-balena ssh balena.local
+balena ssh <device ip>
 ```
 
 At this point you are in a console as root user on your Jetson running balenaOS. The commands from this point on are exactly the same as the instructions for running using JetPack on the Nano Developer Kit with the following differences.
@@ -43,10 +43,10 @@ So issuing the following commands will run MaskCam:
 ```
 $ balena pull maskcam/maskcam-beta
 
-$ balena run --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=10.0.0.245 -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+$ balena run --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=<device ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
-Note that building from source is significantly different on balenaOS than using docker under JetPack. If you wish to do this, you should familarize yourself with the details of balenaOS and also consider using balenaCloud (which has free accounts for under 10 devices).
+Note that setting `MASKCAM_DEVICE_ADDRESS` is optional, and you can also set other configuration parameters exactly as indicated in the [device configuration](https://github.com/bdtinc/maskcam#setting-device-configuration-parameters) section of the main docs.
 
 ### Using balenaCloud
 You can create a free balenaCloud account that will allow you to link up to 10 devices, in order to test some of the most useful features that this platform provides.
