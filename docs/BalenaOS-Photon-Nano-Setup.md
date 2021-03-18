@@ -5,8 +5,8 @@ BalenaOS is a very light weight distribution designed for running containers on 
 When using a Jetson Nano with a Photon carrier board (i.e. a "Photon Nano"), the process for installing balenaOS is different than with a Developer Kit. The production Jetson Nano module does not have an SD card slot, so balenaOS has to be directly flashed onto the device over USB, rather than using balenaEtcher. Fortunately, balena has created a flashing tool called [jetson-flash](https://github.com/balena-os/jetson-flash) that allows you to do this.
 
 
-## Setting up jetson-flash
-To flash the balenaOS image onto the Photon Nano, we need to use Balena's jetson-flash tool. For this project, the jetson-flash tool was tested and used on a PC with Ubuntu >= v16.04. It also requires NodeJS >= v10, which can be installed on Ubuntu using [these installation instructions](https://github.com/nodesource/distributions/blob/master/README.md#installation-instructions).
+### Setting up jetson-flash
+To flash the balenaOS image onto the Photon Nano, we need to use Balena's jetson-flash tool. The instructions here show how to install and use jetson-flash on an Ubuntu v18.04 PC. The tool also requires NodeJS >= v10, which can be installed on Ubuntu using [these installation instructions](https://github.com/nodesource/distributions/blob/master/README.md#installation-instructions).
 
 First, clone the jetson-flash repository using:
 
@@ -24,24 +24,18 @@ npm install
 
 Now jetson-flash is ready to be used to flash the OS image onto the Photon Nano.
 
-## 
+### Flashing balenaOS onto the Jetson Nano over USB
+Before flashing the OS, the Photon Nano has to be powered on and put into Force Recovery as shown in the [Photon manual](https://connecttech.com/ftp/pdf/CTIM_NGX002_Manual.pdf). Starting with a Photon carrier board that has a Jetson Nano module installed, plug in 12V power to the barrel jack on the carrier board. Then, press and hold SW2 for at least 10 seconds.
 
-Except for installing balenaOS and using a slightly modified launch command, this process is essentially the same as the Jetson Nano Development kit instructions from [the main README](https://github.com/bdtinc/maskcam#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit).
+Plug a micro-USB cord from the Ubuntu PC to P13 on the bottom side of the Photon carrier board. Verify the board is in Force Recovery mode by issuing `lsusb` and checking that an Nvidia device is listed. If it isn't, try re-connecting the USB cable and repeating the process to put the board in Force Recovery mode.
 
-If you want to use balenaCloud instead (i.e: see your device in the web dashboard), and you're willing to take some time to push the container to your own account, check [Using balenaCloud](#using-balenacloud) at the end of this section.
+Begin flashing by issuing the following command, where `balena.img` is replaced with the filename for the image that was downloaded and extracted previously.
 
-In any case, this will require a Jetson Nano Development Kit, a 32 GB or higher Micro-SD card, and another computer (referred to here as main system) on the same network.
+```
+sudo ./bin/cmd.js -f balena.img -m jetson-nano-eemmc
+```
 
-### Installing balenaOS
-As mentioned, this procedure will not link your device with a balenaCloud account, but instead it will enable local development.
-
-First, go to https://www.balena.io/os/, scroll to the Download section, and download the development version for Nvidia Jetson Nano SD-CARD.
-
-Next, go to https://www.balena.io/etcher/ and install balenaEtcher.
-
-In balenaEtcher, simply select the zip file you downloaded, and after inserting the sd card into your main system select it, then press the 'Flash!' icon.
-
-After the flashing process is completed, place the sd card into your Jetson Nano Development Kit, ensure the network cable is plugged into the device and power up the Jetson.
+This will initiate the flashing process, which takes about 10 minutes. Once it's complete, unplug the micro-USB cable and power cycle the Photon carrier board. Plug an Ethernet cable into the Photon to connect it to a local network.
 
 ### Installing balena CLI
 
@@ -49,25 +43,21 @@ Use [these instructions](https://github.com/balena-io/balena-cli/blob/master/INS
 
 ### Connecting to your Jetson
 
-First, in a terminal on your main system run the command:
+On the Ubuntu PC, open a terminal and run:
 ```
 sudo balena scan
 ```
-Note the ip address in the result.
 
-Next connect to your Jetson:
+This will report the IP address of your Photon Nano. Use this IP address with the following command to connect to your Jetson:
+
 ```
 balena ssh <device ip>
 ```
 
-At this point you are in a console as root user on your Jetson running balenaOS. The commands from this point on are exactly the same as the instructions for running using JetPack on the Nano Developer Kit with the following differences.
-1. The `docker` command is replaced by `balena`
-2. Do not use the `--runtime nvidia` switch. It is automatic on balenaOS for Jetson and you will get errors if you include it.
+At this point you are in a console as root user on your Jetson running balenaOS. Now, we just need to download the docker container and run it! On balenaOS, "docker" is replaced by "balena", as shown in the following command. Issue the two commands below to download and run MaskCam:
 
-So issuing the following commands will run MaskCam:
 ```
 $ balena pull maskcam/maskcam-beta
-
 $ balena run --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=<device ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
