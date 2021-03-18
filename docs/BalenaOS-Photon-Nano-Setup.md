@@ -1,30 +1,82 @@
-# BalenaOS Photon Nano Setup Instructions for MaskCam
-This page provides step-by-step instructions for setting up the Connect Tech Photon-based Nano with balenaOS. BalenaOS is a barebones host operating system optimized for running Docker containers. It allows MaskCam to easily be installed as a container and remotely updated or configured. This is the configuration used for our production MaskCam device.
+# BalenaOS Setup Instructions for MaskCam on Jetson Nano with Photon Carrier Board
 
-## Setup Instructions
+BalenaOS is a very light weight distribution designed for running containers on edge devices. It has a number of advantages for fleet deployment and management, especially when combined with balena's balenaCloud mangament system. Explaining the details of how to set up balenaCloud applications is beyond the scope of this document, but you can test MaskCam on balenaOS using a local development environment setup.
 
-### 1. Create balena account
-Evan or John can work on this part
+When using a Jetson Nano with a Photon carrier board (i.e. a "Photon Nano"), the process for installing balenaOS is different than with a Developer Kit. The production Jetson Nano module does not have an SD card slot, so balenaOS has to be directly flashed onto the device over USB, rather than using balenaEtcher. Fortunately, balena has created a flashing tool called [jetson-flash](https://github.com/balena-os/jetson-flash) that allows you to do this.
 
 
-### 2. Create new application and device on balena dashboard
-Evan or John can work on this part. 
+## Setting up jetson-flash
+To flash the balenaOS image onto the Photon Nano, we need to use Balena's jetson-flash tool. For this project, the jetson-flash tool was tested and used on a PC with Ubuntu >= v16.04. It also requires NodeJS >= v10, which can be installed on Ubuntu using [these installation instructions](https://github.com/nodesource/distributions/blob/master/README.md#installation-instructions).
 
-### 3. Flashing balenaOS onto Jetson Nano eMMC and configuring device tree
-Evan can work on this part.
-This part includes: 
-1. Setting up the [jetson-flash](https://github.com/balena-os/jetson-flash) tool
-2. Flashing the device image onto the Nano's eMMC chip using jetson-flash
-3. Remotely connecting to Nano, downloading the CTI-Photon DTB file, and putting it in the right spot
+First, clone the jetson-flash repository using:
 
+```
+git clone https://github.com/balena-os/jetson-flash.git
+```
 
-### 3. Deploy MaskCam code to balena device
-(John can work on this part... Evan doesn't know how it works yet :grimacing: )
-This part also needs to show how to configure the device in balena dashboard so it points to the CTI-Photon DTB file
+Next, go to the [balenaOS download page](https://www.balena.io/os/#download) and download the CTI Photon Nano Development image. Unzip the image, and move it to the jetson-flash directory.
 
+Then, from inside the `jetson-flash` directory, issue the following command to download the NodeJS package dependencies.
 
-### 4. Running MaskCam on device
-Evan or John can work on this part.
-Still need to test out Braulio's new code that automatically starts MaskCam on powerup to see how it works.
+```
+npm install
+```
 
-### What else?
+Now jetson-flash is ready to be used to flash the OS image onto the Photon Nano.
+
+## 
+
+Except for installing balenaOS and using a slightly modified launch command, this process is essentially the same as the Jetson Nano Development kit instructions from [the main README](https://github.com/bdtinc/maskcam#running-maskcam-from-a-container-on-a-jetson-nano-developer-kit).
+
+If you want to use balenaCloud instead (i.e: see your device in the web dashboard), and you're willing to take some time to push the container to your own account, check [Using balenaCloud](#using-balenacloud) at the end of this section.
+
+In any case, this will require a Jetson Nano Development Kit, a 32 GB or higher Micro-SD card, and another computer (referred to here as main system) on the same network.
+
+### Installing balenaOS
+As mentioned, this procedure will not link your device with a balenaCloud account, but instead it will enable local development.
+
+First, go to https://www.balena.io/os/, scroll to the Download section, and download the development version for Nvidia Jetson Nano SD-CARD.
+
+Next, go to https://www.balena.io/etcher/ and install balenaEtcher.
+
+In balenaEtcher, simply select the zip file you downloaded, and after inserting the sd card into your main system select it, then press the 'Flash!' icon.
+
+After the flashing process is completed, place the sd card into your Jetson Nano Development Kit, ensure the network cable is plugged into the device and power up the Jetson.
+
+### Installing balena CLI
+
+Use [these instructions](https://github.com/balena-io/balena-cli/blob/master/INSTALL.md) to install the balena CLI tool on your Ubuntu PC.
+
+### Connecting to your Jetson
+
+First, in a terminal on your main system run the command:
+```
+sudo balena scan
+```
+Note the ip address in the result.
+
+Next connect to your Jetson:
+```
+balena ssh <device ip>
+```
+
+At this point you are in a console as root user on your Jetson running balenaOS. The commands from this point on are exactly the same as the instructions for running using JetPack on the Nano Developer Kit with the following differences.
+1. The `docker` command is replaced by `balena`
+2. Do not use the `--runtime nvidia` switch. It is automatic on balenaOS for Jetson and you will get errors if you include it.
+
+So issuing the following commands will run MaskCam:
+```
+$ balena pull maskcam/maskcam-beta
+
+$ balena run --privileged --rm -it --env MASKCAM_DEVICE_ADDRESS=<device ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
+```
+
+Note that setting `MASKCAM_DEVICE_ADDRESS` is optional, and you can also set other configuration parameters exactly as indicated in the [device configuration](https://github.com/bdtinc/maskcam#setting-device-configuration-parameters) section of the main docs.
+
+### Using balenaCloud
+You can create a free balenaCloud account that will allow you to link up to 10 devices, in order to test some of the most useful features that this platform provides.
+You'll need to create an App, install the balena CLI and then follow these instructions in order to deploy the maskcam container to your app:
+
+https://www.balena.io/docs/learn/deploy/deployment/
+
+For a simple use case, you can just use the `balena push myApp` command from the root directory of this project (it will take a long time while it builds and pushes the whole image), but you should familiarize yourself with the platform and use the deployment method that better fits your needs.
