@@ -32,7 +32,7 @@ Plug a micro-USB cord from the Ubuntu PC to P13 on the bottom side of the Photon
 Begin flashing by issuing the following command, where `balena.img` is replaced with the filename for the image that was downloaded and extracted previously.
 
 ```
-sudo ./bin/cmd.js -f balena.img -m jetson-nano-eemmc
+sudo ./bin/cmd.js -f balena.img -m jetson-nano-emmc
 ```
 
 This will initiate the flashing process, which takes about 10 minutes. Once it's complete, unplug the micro-USB cable and power cycle the Photon carrier board. Plug an Ethernet cable into the Photon to connect it to a local network.
