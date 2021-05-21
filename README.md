@@ -91,6 +91,8 @@ This section shows how to set environment variables to change configuration para
 sudo docker run --runtime nvidia --privileged --rm -it --env MASKCAM_INPUT=v4l2:///dev/video1 --env MASKCAM_DEVICE_ADDRESS=<your-jetson-ip> -p 1883:1883 -p 8080:8080 -p 8554:8554 maskcam/maskcam-beta
 ```
 
+Another useful input device that you might want to use is a CSI camera (like the Raspberry Pi camera), and in that case you need to set `MASKCAM_INPUT=argus://0` instead of the value shown above.
+
 As another example, if you have an already set up our MQTT and web server (as shown in [MQTT Server Setup section](#mqtt-and-web-server-setup)), you need to define
 two addtional environment variables, `MQTT_BROKER_IP` and `MQTT_DEVICE_NAME`. This allows your device to find the MQTT server and identify itself:
 
